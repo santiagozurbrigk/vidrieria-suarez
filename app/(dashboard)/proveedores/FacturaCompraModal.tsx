@@ -150,7 +150,10 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
                   <tbody className="divide-y divide-gray-50">
                     {items.map((item, idx) => (
                       <tr key={item.producto_id}>
-                        <td className="table-td font-medium">{item.nombre}</td>
+                        <td className="table-td font-medium">
+                          {item.nombre}
+                          <span className="ml-1 text-xs text-gray-400">{UNIDADES[item.unidad_medida] ?? item.unidad_medida}</span>
+                        </td>
                         <td className="table-td text-right">
                           <input
                             type="number" step="0.001" min="0.001"
