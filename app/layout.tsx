@@ -1,15 +1,18 @@
 import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
 import './globals.css'
 
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
+
 export const metadata: Metadata = {
-  title: 'Vidriería Suárez — Sistema de Gestión',
-  description: 'Sistema interno de gestión para Vidriería Suárez',
+  title: 'Vidriería Suárez',
+  description: 'Sistema de gestión interno',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es">
-      <body>{children}</body>
+    <html lang="es" className={inter.variable}>
+      <body className="font-sans">{children}</body>
     </html>
   )
 }
