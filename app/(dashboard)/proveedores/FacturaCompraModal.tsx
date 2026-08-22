@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { Proveedor, Producto } from '@/lib/supabase/types'
 import { registrarFacturaCompra } from '@/lib/actions/proveedores'
+import { extraerFacturaDesdeArchivo, type FacturaExtraida, type ItemExtraido } from '@/lib/actions/extraerFactura'
 
 type Item = {
   producto_id: string
@@ -26,15 +27,165 @@ function formatCurrency(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 }
 
+/** Find best-matching product by name (simple lowercase includes) */
+function matchProduct(
+  nombre: string,
+  productos: Pick<Producto, 'id' | 'nombre' | 'unidad_medida' | 'costo_actual'>[],
+) {
+  const q = nombre.toLowerCase()
+  return (
+    productos.find((p) => p.nombre.toLowerCase() === q) ??
+    productos.find((p) => p.nombre.toLowerCase().includes(q) || q.includes(p.nombre.toLowerCase()))
+  )
+}
+
+// ────────────────────────────────────────────────────────────────
+// Sub-component: panel with unmatched extracted items
+// ────────────────────────────────────────────────────────────────
+type SuggestionPanelProps = {
+  sugeridos: ItemExtraido[]
+  productos: Pick<Producto, 'id' | 'nombre' | 'unidad_medida' | 'costo_actual'>[]
+  currentItems: Item[]
+  onAgregar: (item: Item) => void
+}
+
+function SuggestionPanel({ sugeridos, productos, currentItems, onAgregar }: SuggestionPanelProps) {
+  // Local state per suggestion: selected product id override
+  const [selects, setSelects] = useState<Record<number, string>>(() =>
+    Object.fromEntries(
+      sugeridos.map((s, i) => {
+        const match = matchProduct(s.nombre, productos)
+        return [i, match?.id ?? '']
+      }),
+    ),
+  )
+
+  const pendientes = sugeridos.filter((_, i) => {
+    const pid = selects[i]
+    return pid && !currentItems.find((x) => x.producto_id === pid)
+  })
+
+  if (pendientes.length === 0 && sugeridos.length > 0) return null
+
+  return (
+    <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
+      <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
+        Ítems detectados por IA — asociá cada uno a un producto
+      </p>
+      {sugeridos.map((s, i) => {
+        const pid = selects[i]
+        const yaAgregado = !!pid && !!currentItems.find((x) => x.producto_id === pid)
+        const prod = productos.find((p) => p.id === pid)
+
+        return (
+          <div key={i} className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-blue-800 flex-shrink-0 w-36 truncate" title={s.nombre}>
+              {s.nombre}
+            </span>
+            <select
+              value={pid}
+              onChange={(e) => setSelects((prev) => ({ ...prev, [i]: e.target.value }))}
+              className="input text-xs flex-1 min-w-0"
+              disabled={yaAgregado}
+            >
+              <option value="">— sin coincidencia —</option>
+              {productos.map((p) => (
+                <option key={p.id} value={p.id}>{p.nombre}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={!pid || yaAgregado}
+              onClick={() => {
+                if (!prod) return
+                onAgregar({
+                  producto_id: prod.id,
+                  nombre: prod.nombre,
+                  unidad_medida: prod.unidad_medida,
+                  cantidad: s.cantidad,
+                  costo_unitario: s.costo_unitario,
+                  subtotal: s.cantidad * s.costo_unitario,
+                })
+              }}
+              className={`flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition
+                ${yaAgregado
+                  ? 'bg-green-100 text-green-700 cursor-default'
+                  : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40'}`}
+            >
+              {yaAgregado ? '✓ Agregado' : 'Agregar'}
+            </button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ────────────────────────────────────────────────────────────────
+// Main modal
+// ────────────────────────────────────────────────────────────────
 export default function FacturaCompraModal({ proveedor, productos, onSaved, onClose }: Props) {
   const [items, setItems] = useState<Item[]>([])
   const [iva, setIva] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // AI extraction state
+  const [extracting, setExtracting] = useState(false)
+  const [extractError, setExtractError] = useState<string | null>(null)
+  const [sugeridos, setSugeridos] = useState<ItemExtraido[] | null>(null)
+  const [fileName, setFileName] = useState<string | null>(null)
+
+  // Controlled header fields (so IA can pre-fill them)
+  const [numero, setNumero] = useState('')
+  const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10))
+  const [tipoComprobante, setTipoComprobante] = useState('FACTURA')
+  const [notas, setNotas] = useState('')
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   const subtotal = items.reduce((s, i) => s + i.subtotal, 0)
   const total = subtotal + iva
 
+  // ── AI extraction ──
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf']
+    if (!allowed.includes(file.type)) {
+      setExtractError('Formato no soportado. Usá JPG, PNG, WEBP o PDF.')
+      return
+    }
+
+    setFileName(file.name)
+    setExtractError(null)
+    setExtracting(true)
+    setSugeridos(null)
+
+    try {
+      const fd = new FormData()
+      fd.append('archivo', file)
+      const data: FacturaExtraida = await extraerFacturaDesdeArchivo(fd)
+
+      // Pre-fill header fields
+      if (data.numero) setNumero(data.numero)
+      if (data.fecha) setFecha(data.fecha)
+      if (data.tipo_comprobante) setTipoComprobante(data.tipo_comprobante)
+      if (data.iva != null) setIva(data.iva)
+      if (data.notas) setNotas(data.notas)
+
+      setSugeridos(data.items ?? [])
+    } catch (err: unknown) {
+      setExtractError(err instanceof Error ? err.message : 'Error al procesar el archivo')
+    } finally {
+      setExtracting(false)
+      // Reset input so same file can be re-uploaded
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  // ── Manual item management ──
   function agregarItem(productoId: string) {
     const p = productos.find((x) => x.id === productoId)
     if (!p || items.find((x) => x.producto_id === productoId)) return
@@ -46,6 +197,11 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
       costo_unitario: p.costo_actual,
       subtotal: p.costo_actual,
     }])
+  }
+
+  function agregarItemDesdeIA(item: Item) {
+    if (items.find((x) => x.producto_id === item.producto_id)) return
+    setItems((prev) => [...prev, item])
   }
 
   function updateItem(idx: number, field: 'cantidad' | 'costo_unitario', value: number) {
@@ -61,22 +217,22 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
     setItems((prev) => prev.filter((_, i) => i !== idx))
   }
 
+  // ── Submit ──
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
-    if (items.length === 0) { setError('Agregue al menos un producto.'); return }
+    if (items.length === 0) { setError('Agregá al menos un producto.'); return }
     setLoading(true)
-    const fd = new FormData(e.currentTarget)
     try {
       await registrarFacturaCompra({
         proveedor_id: proveedor.id,
-        numero: fd.get('numero') as string,
-        fecha: fd.get('fecha') as string,
-        tipo_comprobante: fd.get('tipo_comprobante') as string,
+        numero,
+        fecha,
+        tipo_comprobante: tipoComprobante,
         subtotal,
         iva,
         total,
-        notas: fd.get('notas') as string,
+        notas,
         items,
       })
       onSaved()
@@ -90,6 +246,8 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl flex flex-col max-h-[90vh]">
+
+        {/* Header */}
         <div className="p-6 border-b border-gray-100">
           <h2 className="text-lg font-bold text-gray-900">Nueva factura de compra</h2>
           <p className="text-sm text-gray-500 mt-1">Proveedor: <strong>{proveedor.razon_social}</strong></p>
@@ -97,19 +255,100 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
 
         <div className="overflow-y-auto flex-1 p-6">
           <form id="factura-form" onSubmit={handleSubmit} className="space-y-5">
-            {/* Encabezado factura */}
+
+            {/* ── Upload section ── */}
+            <div className="rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-blue-800">
+                    📷 Cargá una foto o PDF de la factura
+                  </p>
+                  <p className="text-xs text-blue-600 mt-0.5">
+                    La IA reconocerá los datos automáticamente (requiere <code className="bg-blue-100 px-1 rounded">ANTHROPIC_KEY</code>)
+                  </p>
+                </div>
+                <label className="cursor-pointer">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
+                    onChange={handleFileChange}
+                    className="sr-only"
+                  />
+                  <span className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition
+                    ${extracting
+                      ? 'bg-blue-200 text-blue-500 cursor-wait'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
+                    {extracting ? (
+                      <>
+                        <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                        </svg>
+                        Analizando…
+                      </>
+                    ) : (
+                      <>⬆ Subir archivo</>
+                    )}
+                  </span>
+                </label>
+              </div>
+
+              {fileName && !extracting && (
+                <p className="text-xs text-blue-700">
+                  ✓ <strong>{fileName}</strong>{sugeridos !== null ? ` — ${sugeridos.length} ítem(s) detectado(s)` : ''}
+                </p>
+              )}
+
+              {extractError && (
+                <p className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-600">{extractError}</p>
+              )}
+            </div>
+
+            {/* ── AI suggestions panel ── */}
+            {sugeridos && sugeridos.length > 0 && (
+              <SuggestionPanel
+                sugeridos={sugeridos}
+                productos={productos}
+                currentItems={items}
+                onAgregar={agregarItemDesdeIA}
+              />
+            )}
+            {sugeridos && sugeridos.length === 0 && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                La IA no detectó ítems en el comprobante. Agregá los productos manualmente abajo.
+              </p>
+            )}
+
+            {/* ── Header fields ── */}
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="label">Número *</label>
-                <input name="numero" required className="input" placeholder="0001-00001234" />
+                <input
+                  value={numero}
+                  onChange={(e) => setNumero(e.target.value)}
+                  required
+                  className="input"
+                  placeholder="0001-00001234"
+                />
               </div>
               <div>
                 <label className="label">Fecha *</label>
-                <input name="fecha" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} className="input" />
+                <input
+                  type="date"
+                  value={fecha}
+                  onChange={(e) => setFecha(e.target.value)}
+                  required
+                  className="input"
+                />
               </div>
               <div>
                 <label className="label">Tipo comprobante</label>
-                <select name="tipo_comprobante" className="input">
+                <select
+                  value={tipoComprobante}
+                  onChange={(e) => setTipoComprobante(e.target.value)}
+                  className="input"
+                >
                   <option value="FACTURA">Factura</option>
                   <option value="REMITO">Remito</option>
                   <option value="TICKET">Ticket</option>
@@ -118,9 +357,9 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
               </div>
             </div>
 
-            {/* Agregar producto */}
+            {/* ── Manual product selector ── */}
             <div>
-              <label className="label">Agregar producto</label>
+              <label className="label">Agregar producto manualmente</label>
               <select
                 onChange={(e) => { if (e.target.value) { agregarItem(e.target.value); e.target.value = '' } }}
                 className="input"
@@ -134,7 +373,7 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
               </select>
             </div>
 
-            {/* Tabla de ítems */}
+            {/* ── Items table ── */}
             {items.length > 0 && (
               <div className="overflow-x-auto rounded-lg border border-gray-100">
                 <table className="w-full text-sm">
@@ -181,7 +420,7 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
               </div>
             )}
 
-            {/* Totales */}
+            {/* ── Totals ── */}
             <div className="flex justify-end">
               <div className="w-56 space-y-2 text-sm">
                 <div className="flex justify-between text-gray-600">
@@ -206,7 +445,12 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
 
             <div>
               <label className="label">Notas</label>
-              <textarea name="notas" rows={2} className="input" />
+              <textarea
+                value={notas}
+                onChange={(e) => setNotas(e.target.value)}
+                rows={2}
+                className="input"
+              />
             </div>
 
             {error && (
@@ -215,6 +459,7 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
           </form>
         </div>
 
+        {/* Footer */}
         <div className="border-t border-gray-100 p-4 flex justify-end gap-3">
           <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
           <button type="submit" form="factura-form" disabled={loading} className="btn-primary">
