@@ -189,3 +189,72 @@ export async function registrarFacturaCompra(payload: unknown) {
   revalidatePath('/precios')
   return factura
 }
+
+// ── Gestión de margen por proveedor ──────────────────────────────────────────
+export async function actualizarMargenProveedor(proveedorId: string, margen: number) {
+  const m = z.number().min(0).max(1000).parse(margen)
+  const supabase = await createServerClient()
+  const { error } = await supabase
+    .from('proveedores')
+    .update({ margen_ganancia: m })
+    .eq('id', proveedorId)
+  if (error) throw new Error(error.message)
+  revalidatePath('/precios')
+}
+
+/**
+ * Re-aplica el margen actual del proveedor a todos los productos que alguna vez
+ * se compraron a ese proveedor, recalculando precio_venta con el costo actual.
+ */
+export async function recalcularPreciosProveedor(proveedorId: string) {
+  const supabase = await createServerClient()
+
+  // Obtener margen del proveedor
+  const { data: prov, error: provError } = await supabase
+    .from('proveedores')
+    .select('margen_ganancia')
+    .eq('id', proveedorId)
+    .single()
+  if (provError) throw new Error(provError.message)
+
+  const margen = prov.margen_ganancia
+
+  // IDs de facturas de este proveedor
+  const { data: facturas, error: fErr } = await supabase
+    .from('facturas_compra')
+    .select('id')
+    .eq('proveedor_id', proveedorId)
+  if (fErr) throw new Error(fErr.message)
+
+  const facturaIds = facturas?.map((f) => f.id) ?? []
+  if (facturaIds.length === 0) return
+
+  // IDs únicos de productos comprados a este proveedor
+  const { data: items, error: iErr } = await supabase
+    .from('factura_compra_items')
+    .select('producto_id')
+    .in('factura_compra_id', facturaIds)
+  if (iErr) throw new Error(iErr.message)
+
+  const productoIds = [...new Set(items?.map((i) => i.producto_id) ?? [])]
+  if (productoIds.length === 0) return
+
+  // Leer costos actuales
+  const { data: productos, error: pErr } = await supabase
+    .from('productos')
+    .select('id, costo_actual')
+    .in('id', productoIds)
+  if (pErr) throw new Error(pErr.message)
+
+  // Actualizar precio_venta y margen_ganancia en batch
+  for (const prod of productos ?? []) {
+    const nuevoPrecio = Math.round(prod.costo_actual * (1 + margen / 100) * 100) / 100
+    await supabase
+      .from('productos')
+      .update({ margen_ganancia: margen, precio_venta: nuevoPrecio })
+      .eq('id', prod.id)
+  }
+
+  revalidatePath('/precios')
+  revalidatePath('/stock')
+}

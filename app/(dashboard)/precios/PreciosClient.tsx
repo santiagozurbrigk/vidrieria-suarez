@@ -1,8 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import type { Producto } from '@/lib/supabase/types'
-import { actualizarMargen } from '@/lib/actions/stock'
+import type { Producto, Proveedor } from '@/lib/supabase/types'
+import { actualizarMargenProveedor, recalcularPreciosProveedor } from '@/lib/actions/proveedores'
+
+type ProveedorSlim = Pick<Proveedor, 'id' | 'razon_social' | 'margen_ganancia'>
+type ProductoSlim = Pick<Producto, 'id' | 'nombre' | 'categoria' | 'unidad_medida' | 'costo_actual' | 'margen_ganancia' | 'precio_venta'>
 
 const CATEGORIAS: Record<string, string> = { VIDRIO: '🪟', ALUMINIO: '🔩', ACCESORIO: '⚙️', INSUMO: '🧴' }
 
@@ -10,154 +13,218 @@ function formatCurrency(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 }
 
-export default function PreciosClient({ productos: initial }: { productos: Producto[] }) {
-  const [productos, setProductos] = useState(initial)
-  const [editando, setEditando] = useState<Record<string, number>>({})
-  const [loading, setLoading] = useState<string | null>(null)
+// ── Fila de proveedor ────────────────────────────────────────────────────────
+function ProveedorRow({ prov }: { prov: ProveedorSlim }) {
+  const [margen, setMargen] = useState(prov.margen_ganancia)
+  const [editando, setEditando] = useState(false)
+  const [draft, setDraft] = useState(prov.margen_ganancia)
+  const [saving, setSaving] = useState(false)
+  const [applying, setApplying] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [busqueda, setBusqueda] = useState('')
+  const [applyMsg, setApplyMsg] = useState<string | null>(null)
 
-  const filtrados = productos.filter((p) =>
-    p.nombre.toLowerCase().includes(busqueda.toLowerCase())
-  )
-
-  function startEdit(id: string, margenActual: number) {
-    setEditando((prev) => ({ ...prev, [id]: margenActual }))
-  }
-
-  async function saveMargen(producto: Producto) {
-    const nuevoMargen = editando[producto.id]
-    if (nuevoMargen === undefined) return
-    setLoading(producto.id)
+  async function guardar() {
+    setSaving(true)
     setError(null)
     try {
-      const actualizado = await actualizarMargen(producto.id, nuevoMargen)
-      if (actualizado) {
-        setProductos((prev) => prev.map((p) => p.id === producto.id ? actualizado : p))
-        setEditando((prev) => { const n = { ...prev }; delete n[producto.id]; return n })
-      }
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error al actualizar')
+      await actualizarMargenProveedor(prov.id, draft)
+      setMargen(draft)
+      setEditando(false)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Error')
     } finally {
-      setLoading(null)
+      setSaving(false)
     }
   }
 
-  function cancelEdit(id: string) {
-    setEditando((prev) => { const n = { ...prev }; delete n[id]; return n })
+  async function aplicar() {
+    setApplying(true)
+    setApplyMsg(null)
+    setError(null)
+    try {
+      await recalcularPreciosProveedor(prov.id)
+      setApplyMsg('✓ Precios actualizados')
+      setTimeout(() => setApplyMsg(null), 3000)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Error')
+    } finally {
+      setApplying(false)
+    }
   }
 
   return (
-    <div>
-      <div className="mb-6">
+    <tr className="hover:bg-gray-50 transition-colors">
+      <td className="table-td font-medium text-gray-900">{prov.razon_social}</td>
+      <td className="table-td text-right w-40">
+        {editando ? (
+          <input
+            type="number"
+            step="0.5"
+            min="0"
+            max="1000"
+            value={draft}
+            onChange={(e) => setDraft(parseFloat(e.target.value) || 0)}
+            className="input w-24 text-right"
+            autoFocus
+            onKeyDown={(e) => { if (e.key === 'Enter') guardar(); if (e.key === 'Escape') setEditando(false) }}
+          />
+        ) : (
+          <span className="font-semibold text-gray-900">{margen}%</span>
+        )}
+      </td>
+      <td className="table-td">
+        <div className="flex items-center gap-3 flex-wrap">
+          {editando ? (
+            <>
+              <button
+                onClick={guardar}
+                disabled={saving}
+                className="text-xs text-green-600 hover:underline disabled:opacity-50"
+              >
+                {saving ? '...' : 'Guardar'}
+              </button>
+              <button
+                onClick={() => { setEditando(false); setDraft(margen) }}
+                className="text-xs text-gray-400 hover:underline"
+              >
+                Cancelar
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => { setDraft(margen); setEditando(true) }}
+              className="text-xs text-blue-600 hover:underline"
+            >
+              Editar
+            </button>
+          )}
+          <button
+            onClick={aplicar}
+            disabled={applying}
+            className="text-xs text-amber-700 hover:underline disabled:opacity-50"
+            title="Re-aplica este margen a todos los productos comprados a este proveedor"
+          >
+            {applying ? '...' : 'Aplicar a productos'}
+          </button>
+          {applyMsg && <span className="text-xs text-green-600">{applyMsg}</span>}
+          {error && <span className="text-xs text-red-600">{error}</span>}
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+// ── Componente principal ─────────────────────────────────────────────────────
+export default function PreciosClient({
+  proveedores,
+  productos,
+}: {
+  proveedores: ProveedorSlim[]
+  productos: ProductoSlim[]
+}) {
+  const [busqueda, setBusqueda] = useState('')
+
+  const filtrados = productos.filter((p) =>
+    p.nombre.toLowerCase().includes(busqueda.toLowerCase()),
+  )
+
+  return (
+    <div className="space-y-8">
+      <div>
         <h1 className="text-2xl font-bold text-gray-900">Lista de Precios</h1>
         <p className="text-sm text-gray-500 mt-1">
-          El precio de venta se calcula automáticamente al registrar una factura de compra.
-          Acá podés ajustar el margen por producto.
+          El precio de venta se calcula automáticamente usando el margen del proveedor cada vez que
+          se registra una factura de compra.
         </p>
       </div>
 
-      {error && (
-        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600">{error}</div>
-      )}
+      {/* ── Sección 1: Márgenes por proveedor ─────────────────────────────── */}
+      <section>
+        <h2 className="text-base font-semibold text-gray-800 mb-3">Márgenes por proveedor</h2>
+        <div className="card overflow-hidden p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="border-b border-gray-100 bg-gray-50">
+                <tr>
+                  <th className="table-th">Proveedor</th>
+                  <th className="table-th text-right">Margen de ganancia</th>
+                  <th className="table-th">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {proveedores.map((p) => (
+                  <ProveedorRow key={p.id} prov={p} />
+                ))}
+                {proveedores.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="py-8 text-center text-sm text-gray-400">
+                      No hay proveedores activos.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-gray-400">
+          💡 <strong>Aplicar a productos</strong> recalcula los precios de todos los productos que se compraron
+          alguna vez a ese proveedor usando el margen actual. Los cambios futuros se aplican automáticamente al
+          registrar cada factura.
+        </p>
+      </section>
 
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Buscar producto..."
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          className="input w-64"
-        />
-      </div>
-
-      <div className="card overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="border-b border-gray-100 bg-gray-50">
-              <tr>
-                <th className="table-th">Producto</th>
-                <th className="table-th">Categoría</th>
-                <th className="table-th text-right">Costo actual</th>
-                <th className="table-th text-right">Margen (%)</th>
-                <th className="table-th text-right">Precio de venta</th>
-                <th className="table-th"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtrados.map((p) => {
-                const isEditing = p.id in editando
-                const margenEdit = editando[p.id]
-                const precioPreview = isEditing
-                  ? Math.round(p.costo_actual * (1 + margenEdit / 100) * 100) / 100
-                  : p.precio_venta
-
-                return (
-                  <tr key={p.id} className={`hover:bg-gray-50 transition-colors ${isEditing ? 'bg-blue-50' : ''}`}>
+      {/* ── Sección 2: Lista de precios actual ────────────────────────────── */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold text-gray-800">Precios actuales por producto</h2>
+          <input
+            type="text"
+            placeholder="Buscar producto..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            className="input w-56"
+          />
+        </div>
+        <div className="card overflow-hidden p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="border-b border-gray-100 bg-gray-50">
+                <tr>
+                  <th className="table-th">Producto</th>
+                  <th className="table-th">Categoría</th>
+                  <th className="table-th text-right">Costo actual</th>
+                  <th className="table-th text-right">Margen aplicado</th>
+                  <th className="table-th text-right">Precio de venta</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {filtrados.map((p) => (
+                  <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                     <td className="table-td font-medium text-gray-900">{p.nombre}</td>
                     <td className="table-td">
                       <span className="badge bg-gray-100 text-gray-700">
                         {CATEGORIAS[p.categoria]} {p.categoria}
                       </span>
                     </td>
-                    <td className="table-td text-right">{formatCurrency(p.costo_actual)}</td>
-                    <td className="table-td text-right">
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={margenEdit}
-                          onChange={(e) =>
-                            setEditando((prev) => ({ ...prev, [p.id]: parseFloat(e.target.value) || 0 }))
-                          }
-                          className="input w-24 text-right"
-                          autoFocus
-                        />
-                      ) : (
-                        <span className="text-gray-700">{p.margen_ganancia}%</span>
-                      )}
-                    </td>
+                    <td className="table-td text-right text-gray-700">{formatCurrency(p.costo_actual)}</td>
+                    <td className="table-td text-right text-gray-500">{p.margen_ganancia}%</td>
                     <td className="table-td text-right font-semibold text-green-700">
-                      {formatCurrency(precioPreview)}
-                    </td>
-                    <td className="table-td">
-                      <div className="flex justify-end gap-2">
-                        {isEditing ? (
-                          <>
-                            <button
-                              onClick={() => saveMargen(p)}
-                              disabled={loading === p.id}
-                              className="text-xs text-green-600 hover:underline disabled:opacity-50"
-                            >
-                              {loading === p.id ? '...' : 'Guardar'}
-                            </button>
-                            <button onClick={() => cancelEdit(p.id)} className="text-xs text-gray-400 hover:underline">
-                              Cancelar
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            onClick={() => startEdit(p.id, p.margen_ganancia)}
-                            className="text-xs text-blue-600 hover:underline"
-                          >
-                            Editar margen
-                          </button>
-                        )}
-                      </div>
+                      {formatCurrency(p.precio_venta)}
                     </td>
                   </tr>
-                )
-              })}
-              {filtrados.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="py-10 text-center text-sm text-gray-400">No hay productos.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                ))}
+                {filtrados.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-10 text-center text-sm text-gray-400">
+                      No hay productos.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      </section>
     </div>
   )
 }
