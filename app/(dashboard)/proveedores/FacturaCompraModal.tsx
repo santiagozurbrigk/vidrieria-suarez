@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react'
 import type { Proveedor, Producto } from '@/lib/supabase/types'
 import { registrarFacturaCompra } from '@/lib/actions/proveedores'
-import { extraerFacturaDesdeArchivo, type FacturaExtraida, type ItemExtraido } from '@/lib/actions/extraerFactura'
+import { extraerFacturaDesdeArchivo, type ItemExtraido } from '@/lib/actions/extraerFactura'
 
 type Item = {
   producto_id: string
@@ -163,11 +163,19 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
     setExtracting(true)
     setSugeridos(null)
 
-    try {
-      const fd = new FormData()
-      fd.append('archivo', file)
-      const data: FacturaExtraida = await extraerFacturaDesdeArchivo(fd)
+    const fd = new FormData()
+    fd.append('archivo', file)
+    const result = await extraerFacturaDesdeArchivo(fd)
 
+    if (!result.ok) {
+      setExtractError(result.error)
+      setExtracting(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+
+    const data = result.data
+    try {
       // Pre-fill header fields
       if (data.numero) setNumero(data.numero)
       if (data.fecha) setFecha(data.fecha)
@@ -180,6 +188,7 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
       setExtractError(err instanceof Error ? err.message : 'Error al procesar el archivo')
     } finally {
       setExtracting(false)
+
       // Reset input so same file can be re-uploaded
       if (fileInputRef.current) fileInputRef.current.value = ''
     }

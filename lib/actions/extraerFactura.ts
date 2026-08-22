@@ -21,6 +21,12 @@ export type FacturaExtraida = {
   notas?: string
 }
 
+// Discriminated union — never throw; always return ok/error so Next.js
+// doesn't swallow the message in its production error digest.
+export type ExtraerResult =
+  | { ok: true; data: FacturaExtraida }
+  | { ok: false; error: string }
+
 const PROMPT = `Analiza este comprobante de compra y extrae todos los datos disponibles en formato JSON.
 Responde ÚNICAMENTE con el JSON, sin texto adicional antes ni después.
 
@@ -50,22 +56,22 @@ Reglas:
 - Si hay descuentos, refléjalos en el subtotal de cada ítem
 - Para tipo_comprobante elige el que mejor describe el documento`
 
-export async function extraerFacturaDesdeArchivo(formData: FormData): Promise<FacturaExtraida> {
-  const file = formData.get('archivo') as File | null
-  if (!file || file.size === 0) throw new Error('No se recibió ningún archivo')
-
-  const apiKey = process.env.ANTHROPIC_KEY
-  if (!apiKey) throw new Error('Variable de entorno ANTHROPIC_KEY no configurada')
-
-  const client = new Anthropic({ apiKey })
-
-  const bytes = await file.arrayBuffer()
-  const base64 = Buffer.from(bytes).toString('base64')
-  const mediaType = file.type
-
-  let text: string
-
+export async function extraerFacturaDesdeArchivo(formData: FormData): Promise<ExtraerResult> {
   try {
+    const file = formData.get('archivo') as File | null
+    if (!file || file.size === 0) return { ok: false, error: 'No se recibió ningún archivo' }
+
+    const apiKey = process.env.ANTHROPIC_KEY
+    if (!apiKey) return { ok: false, error: 'Variable de entorno ANTHROPIC_KEY no configurada' }
+
+    const client = new Anthropic({ apiKey })
+
+    const bytes = await file.arrayBuffer()
+    const base64 = Buffer.from(bytes).toString('base64')
+    const mediaType = file.type
+
+    let text: string
+
     if (mediaType === 'application/pdf') {
       const docBlock: BetaRequestDocumentBlock = {
         type: 'document',
@@ -96,21 +102,17 @@ export async function extraerFacturaDesdeArchivo(formData: FormData): Promise<Fa
       })
       text = response.content.find((b) => b.type === 'text')?.text ?? ''
     }
-  } catch (apiErr: unknown) {
-    // Re-throw as a plain Error so Next.js can serialize it back to the client
-    const msg = apiErr instanceof Error ? apiErr.message : String(apiErr)
-    throw new Error(`Error al consultar la IA: ${msg}`)
-  }
 
-  const jsonMatch = text.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    throw new Error('La IA no pudo extraer información del comprobante. Verificá que la imagen sea legible.')
-  }
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      return { ok: false, error: 'La IA no pudo extraer información. Verificá que la imagen sea legible.' }
+    }
 
-  try {
     const extracted = JSON.parse(jsonMatch[0]) as FacturaExtraida
-    return { ...extracted, items: extracted.items ?? [] }
-  } catch {
-    throw new Error('Error al procesar la respuesta de la IA. Intentá de nuevo.')
+    return { ok: true, data: { ...extracted, items: extracted.items ?? [] } }
+
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { ok: false, error: `Error al consultar la IA: ${msg}` }
   }
 }
