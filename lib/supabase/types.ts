@@ -64,21 +64,22 @@ export type Database = {
           condicion_iva: 'RESPONSABLE_INSCRIPTO' | 'MONOTRIBUTISTA' | 'EXENTO' | 'CONSUMIDOR_FINAL' | null
           contacto: string | null; telefono: string | null; email: string | null
           direccion: string | null; alias_cbu: string | null; cbu: string | null
-          notas: string | null; activo: boolean; created_at: string; updated_at: string
+          notas: string | null; activo: boolean; margen_ganancia: number
+          created_at: string; updated_at: string
         }
         Insert: {
           id?: string; razon_social: string; cuit?: string | null
           condicion_iva?: 'RESPONSABLE_INSCRIPTO' | 'MONOTRIBUTISTA' | 'EXENTO' | 'CONSUMIDOR_FINAL' | null
           contacto?: string | null; telefono?: string | null; email?: string | null
           direccion?: string | null; alias_cbu?: string | null; cbu?: string | null
-          notas?: string | null; activo?: boolean
+          notas?: string | null; activo?: boolean; margen_ganancia?: number
         }
         Update: {
           razon_social?: string; cuit?: string | null
           condicion_iva?: 'RESPONSABLE_INSCRIPTO' | 'MONOTRIBUTISTA' | 'EXENTO' | 'CONSUMIDOR_FINAL' | null
           contacto?: string | null; telefono?: string | null; email?: string | null
           direccion?: string | null; alias_cbu?: string | null; cbu?: string | null
-          notas?: string | null; activo?: boolean
+          notas?: string | null; activo?: boolean; margen_ganancia?: number
         }
         Relationships: []
       }

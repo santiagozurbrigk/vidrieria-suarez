@@ -3,12 +3,20 @@ import PreciosClient from './PreciosClient'
 
 export default async function PreciosPage() {
   const supabase = await createServerClient()
-  const { data: productos } = await supabase
-    .from('productos')
-    .select('*')
-    .eq('activo', true)
-    .order('categoria')
-    .order('nombre')
 
-  return <PreciosClient productos={productos ?? []} />
+  const [{ data: proveedores }, { data: productos }] = await Promise.all([
+    supabase
+      .from('proveedores')
+      .select('id, razon_social, margen_ganancia')
+      .eq('activo', true)
+      .order('razon_social'),
+    supabase
+      .from('productos')
+      .select('id, nombre, categoria, unidad_medida, costo_actual, margen_ganancia, precio_venta')
+      .eq('activo', true)
+      .order('categoria')
+      .order('nombre'),
+  ])
+
+  return <PreciosClient proveedores={proveedores ?? []} productos={productos ?? []} />
 }
