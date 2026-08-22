@@ -1,30 +1,46 @@
 'use client'
 
 import { useState } from 'react'
-import type { CategoriaGasto } from '@/lib/supabase/types'
-import { registrarGasto } from '@/lib/actions/gastos'
+import type { CategoriaGasto, Gasto } from '@/lib/supabase/types'
+import { registrarGasto, editarGasto } from '@/lib/actions/gastos'
 
 const MEDIOS_PAGO = ['Efectivo', 'Transferencia', 'Tarjeta débito', 'Tarjeta crédito', 'Cheque', 'Otro']
 
 type Props = {
   categorias: CategoriaGasto[]
+  gasto?:     Gasto | null      // null/undefined = create mode
   onSaved: () => void
   onClose: () => void
 }
 
-export default function GastoModal({ categorias, onSaved, onClose }: Props) {
-  const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState<string | null>(null)
+export default function GastoModal({ categorias, gasto, onSaved, onClose }: Props) {
+  const isEdit = !!gasto
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  const [categoriaId, setCategoriaId] = useState(gasto?.categoria_id ?? '')
+  const [concepto,    setConcepto]    = useState(gasto?.concepto ?? '')
+  const [monto,       setMonto]       = useState(gasto?.monto?.toString() ?? '')
+  const [fecha,       setFecha]       = useState(gasto?.fecha ?? new Date().toISOString().slice(0, 10))
+  const [medioPago,   setMedioPago]   = useState(gasto?.medio_pago ?? 'Efectivo')
+  const [notas,       setNotas]       = useState(gasto?.notas ?? '')
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState<string | null>(null)
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     setLoading(true)
     try {
-      await registrarGasto(new FormData(e.currentTarget))
+      const payload = { categoria_id: categoriaId, concepto, monto, medio_pago: medioPago, fecha, notas }
+      if (isEdit) {
+        await editarGasto(gasto!.id, payload)
+      } else {
+        const fd = new FormData()
+        Object.entries(payload).forEach(([k, v]) => fd.append(k, v))
+        await registrarGasto(fd)
+      }
       onSaved()
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error al registrar gasto')
+      setError(err instanceof Error ? err.message : 'Error al guardar gasto')
     } finally {
       setLoading(false)
     }
@@ -34,14 +50,19 @@ export default function GastoModal({ categorias, onSaved, onClose }: Props) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
         <div className="p-6 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-900">Nuevo gasto</h2>
+          <h2 className="text-lg font-bold text-gray-900">{isEdit ? 'Editar gasto' : 'Nuevo gasto'}</h2>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* Categoría */}
           <div>
             <label className="label">Categoría *</label>
-            <select name="categoria_id" required className="input">
+            <select
+              value={categoriaId}
+              onChange={(e) => setCategoriaId(e.target.value)}
+              required
+              className="input"
+            >
               <option value="">— Seleccionar —</option>
               {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
@@ -51,11 +72,12 @@ export default function GastoModal({ categorias, onSaved, onClose }: Props) {
           <div>
             <label className="label">Concepto *</label>
             <input
-              name="concepto"
+              value={concepto}
+              onChange={(e) => setConcepto(e.target.value)}
               required
               className="input"
               placeholder="Descripción del gasto"
-              autoFocus
+              autoFocus={!isEdit}
             />
           </div>
 
@@ -63,14 +85,23 @@ export default function GastoModal({ categorias, onSaved, onClose }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Monto *</label>
-              <input name="monto" type="number" step="0.01" min="0.01" required className="input" placeholder="0" />
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={monto}
+                onChange={(e) => setMonto(e.target.value)}
+                required
+                className="input"
+                placeholder="0"
+              />
             </div>
             <div>
               <label className="label">Fecha *</label>
               <input
-                name="fecha"
                 type="date"
-                defaultValue={new Date().toISOString().slice(0, 10)}
+                value={fecha}
+                onChange={(e) => setFecha(e.target.value)}
                 required
                 className="input"
               />
@@ -80,7 +111,7 @@ export default function GastoModal({ categorias, onSaved, onClose }: Props) {
           {/* Medio de pago */}
           <div>
             <label className="label">Medio de pago</label>
-            <select name="medio_pago" className="input">
+            <select value={medioPago} onChange={(e) => setMedioPago(e.target.value)} className="input">
               {MEDIOS_PAGO.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
@@ -88,7 +119,12 @@ export default function GastoModal({ categorias, onSaved, onClose }: Props) {
           {/* Notas */}
           <div>
             <label className="label">Notas</label>
-            <input name="notas" className="input" placeholder="Opcional" />
+            <input
+              value={notas}
+              onChange={(e) => setNotas(e.target.value)}
+              className="input"
+              placeholder="Opcional"
+            />
           </div>
 
           {error && (
@@ -98,7 +134,7 @@ export default function GastoModal({ categorias, onSaved, onClose }: Props) {
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
             <button type="submit" disabled={loading} className="btn-primary">
-              {loading ? 'Registrando...' : 'Registrar gasto'}
+              {loading ? (isEdit ? 'Guardando…' : 'Registrando…') : (isEdit ? 'Guardar cambios' : 'Registrar gasto')}
             </button>
           </div>
         </form>

@@ -34,6 +34,13 @@ export async function crearRemito(payload: unknown) {
   revalidatePath('/remitos')
 }
 
+export async function eliminarRemito(id: string) {
+  const supabase = await createServerClient()
+  const { error } = await supabase.from('remitos').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+  revalidatePath('/remitos')
+}
+
 export async function actualizarEstadoRemito(id: string, estado: string) {
   const supabase = await createServerClient()
   const { error } = await supabase

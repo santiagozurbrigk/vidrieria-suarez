@@ -289,7 +289,7 @@ export type Database = {
           medio_pago?: string | null; fecha?: string
           archivo_adjunto_path?: string | null; notas?: string | null; usuario_id: string
         }
-        Update: { concepto?: string; monto?: number; medio_pago?: string | null; notas?: string | null }
+        Update: { categoria_id?: string; concepto?: string; monto?: number; medio_pago?: string | null; notas?: string | null }
         Relationships: [
           { foreignKeyName: "gastos_categoria_id_fkey"; columns: ["categoria_id"]; isOneToOne: false; referencedRelation: "categorias_gasto"; referencedColumns: ["id"] },
           { foreignKeyName: "gastos_usuario_id_fkey"; columns: ["usuario_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },

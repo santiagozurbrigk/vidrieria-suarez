@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import type { Remito } from '@/lib/supabase/types'
 import RemitoModal from './RemitoModal'
-import { actualizarEstadoRemito } from '@/lib/actions/remitos'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import { actualizarEstadoRemito, eliminarRemito } from '@/lib/actions/remitos'
 
 type RemitoConRelaciones = Remito & {
   clientes:       { nombre: string; apellido: string | null; razon_social: string | null } | null
@@ -41,8 +42,10 @@ function clienteLabel(c: { nombre: string; apellido: string | null; razon_social
 export default function RemitosClient({ remitos, clientes, facturasVenta }: Props) {
   const [filtro,    setFiltro]    = useState<Filtro>('TODOS')
   const [busqueda,  setBusqueda]  = useState('')
-  const [showModal, setShowModal] = useState(false)
-  const [updating,  setUpdating]  = useState<string | null>(null)
+  const [showModal,    setShowModal]    = useState(false)
+  const [updating,     setUpdating]     = useState<string | null>(null)
+  const [deleteRemito, setDeleteRemito] = useState<RemitoConRelaciones | null>(null)
+  const [deleting,     setDeleting]     = useState(false)
 
   const filtrados = remitos.filter((r) => {
     const matchEstado   = filtro === 'TODOS' || r.estado === filtro
@@ -73,6 +76,19 @@ export default function RemitosClient({ remitos, clientes, facturasVenta }: Prop
   function onSaved() {
     setShowModal(false)
     window.location.reload()
+  }
+
+  async function handleDelete() {
+    if (!deleteRemito) return
+    setDeleting(true)
+    try {
+      await eliminarRemito(deleteRemito.id)
+      setDeleteRemito(null)
+      window.location.reload()
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Error al eliminar')
+      setDeleting(false)
+    }
   }
 
   return (
@@ -196,8 +212,14 @@ export default function RemitosClient({ remitos, clientes, facturasVenta }: Prop
                           </>
                         )}
                         {r.estado !== 'PENDIENTE' && (
-                          <span className="text-xs text-gray-300">—</span>
+                          <span className="text-xs text-gray-300 mr-2">—</span>
                         )}
+                        <button
+                          onClick={() => setDeleteRemito(r)}
+                          className="text-xs text-red-400 hover:text-red-600"
+                        >
+                          Eliminar
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -214,6 +236,18 @@ export default function RemitosClient({ remitos, clientes, facturasVenta }: Prop
           </div>
         </div>
       </div>
+
+      {deleteRemito && (
+        <ConfirmDialog
+          title="Eliminar remito"
+          message={`¿Eliminás el remito ${deleteRemito.numero}? Esta acción no se puede deshacer.`}
+          confirmLabel="Eliminar"
+          variant="danger"
+          loading={deleting}
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteRemito(null)}
+        />
+      )}
 
       {showModal && (
         <RemitoModal

@@ -3,6 +3,8 @@
 import { useState, useMemo } from 'react'
 import type { Gasto, CategoriaGasto } from '@/lib/supabase/types'
 import GastoModal from './GastoModal'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import { eliminarGasto } from '@/lib/actions/gastos'
 
 type GastoConCategoria = Gasto & { categorias_gasto: { nombre: string } | null }
 
@@ -22,6 +24,9 @@ function mesLabel(yyyy: number, mm: number) {
 export default function GastosClient({ gastos: initial, categorias }: Props) {
   const [gastos]        = useState(initial)
   const [showModal, setShowModal] = useState(false)
+  const [editGasto, setEditGasto] = useState<GastoConCategoria | null>(null)
+  const [deleteGasto, setDeleteGasto] = useState<GastoConCategoria | null>(null)
+  const [deleting, setDeleting]   = useState(false)
 
   // Filtros
   const hoy    = new Date()
@@ -30,14 +35,13 @@ export default function GastosClient({ gastos: initial, categorias }: Props) {
   const [catId, setCatId]   = useState<string>('TODAS')
   const [busqueda, setBusqueda] = useState('')
 
-  // Lista de meses disponibles (desde el primer gasto hasta hoy)
+  // Lista de meses disponibles
   const mesesDisponibles = useMemo(() => {
     const set = new Set<string>()
     gastos.forEach((g) => {
-      const d = g.fecha.slice(0, 7) // 'YYYY-MM'
+      const d = g.fecha.slice(0, 7)
       set.add(d)
     })
-    // Siempre incluir el mes actual
     set.add(`${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`)
     return Array.from(set).sort().reverse()
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -56,7 +60,7 @@ export default function GastosClient({ gastos: initial, categorias }: Props) {
     })
   }, [gastos, anio, mes, catId, busqueda])
 
-  // Totales por categoría del período filtrado (antes del filtro de catId)
+  // Totales por categoría del período filtrado
   const mesStr = `${anio}-${String(mes).padStart(2, '0')}`
   const gastosMes = gastos.filter((g) => g.fecha.startsWith(mesStr))
   const totalMes = gastosMes.reduce((s, g) => s + g.monto, 0)
@@ -74,7 +78,21 @@ export default function GastosClient({ gastos: initial, categorias }: Props) {
 
   function onSaved() {
     setShowModal(false)
+    setEditGasto(null)
     window.location.reload()
+  }
+
+  async function handleDelete() {
+    if (!deleteGasto) return
+    setDeleting(true)
+    try {
+      await eliminarGasto(deleteGasto.id)
+      setDeleteGasto(null)
+      window.location.reload()
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Error al eliminar')
+      setDeleting(false)
+    }
   }
 
   return (
@@ -178,6 +196,7 @@ export default function GastosClient({ gastos: initial, categorias }: Props) {
                   <th className="table-th">Concepto</th>
                   <th className="table-th">Medio de pago</th>
                   <th className="table-th text-right">Monto</th>
+                  <th className="table-th"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -192,11 +211,27 @@ export default function GastosClient({ gastos: initial, categorias }: Props) {
                     <td className="table-td font-medium text-gray-900">{g.concepto}</td>
                     <td className="table-td text-gray-500 text-sm">{g.medio_pago ?? '—'}</td>
                     <td className="table-td text-right font-semibold text-red-600">{formatCurrency(g.monto)}</td>
+                    <td className="table-td">
+                      <div className="flex items-center gap-3 justify-end">
+                        <button
+                          onClick={() => setEditGasto(g)}
+                          className="text-xs text-blue-600 hover:underline"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => setDeleteGasto(g)}
+                          className="text-xs text-red-500 hover:underline"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {filtrados.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center text-sm text-gray-400">
+                    <td colSpan={6} className="py-12 text-center text-sm text-gray-400">
                       No hay gastos en este período.
                     </td>
                   </tr>
@@ -207,11 +242,35 @@ export default function GastosClient({ gastos: initial, categorias }: Props) {
         </div>
       </div>
 
+      {/* Modal nuevo gasto */}
       {showModal && (
         <GastoModal
           categorias={categorias}
           onSaved={onSaved}
           onClose={() => setShowModal(false)}
+        />
+      )}
+
+      {/* Modal editar gasto */}
+      {editGasto && (
+        <GastoModal
+          categorias={categorias}
+          gasto={editGasto}
+          onSaved={onSaved}
+          onClose={() => setEditGasto(null)}
+        />
+      )}
+
+      {/* Confirm eliminar */}
+      {deleteGasto && (
+        <ConfirmDialog
+          title="Eliminar gasto"
+          message={`¿Eliminás "${deleteGasto.concepto}" por ${formatCurrency(deleteGasto.monto)}? También se eliminará el movimiento de caja asociado.`}
+          confirmLabel="Eliminar"
+          variant="danger"
+          loading={deleting}
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteGasto(null)}
         />
       )}
     </>

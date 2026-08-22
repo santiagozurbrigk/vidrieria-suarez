@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import type { Arquitecto, Cliente, Producto, Presupuesto } from '@/lib/supabase/types'
 import PresupuestoModal from './PresupuestoModal'
-import { actualizarEstadoPresupuesto, convertirPresupuestoEnFactura } from '@/lib/actions/presupuestos'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import { actualizarEstadoPresupuesto, convertirPresupuestoEnFactura, eliminarPresupuesto } from '@/lib/actions/presupuestos'
 
 type PresupuestoConRelaciones = Presupuesto & {
   arquitectos: { nombre: string; apellido: string | null; estudio: string | null } | null
@@ -72,6 +73,8 @@ export default function PresupuestosClient({ presupuestos: initial, arquitectos,
   const [convertirId, setConvertirId]   = useState<string | null>(null)
   const [numeroFactura, setNumeroFactura] = useState('')
   const [convertError, setConvertError] = useState<string | null>(null)
+  const [deleteId,    setDeleteId]      = useState<string | null>(null)
+  const [deleting,    setDeleting]      = useState(false)
 
   const filtrados = presupuestos.filter((p) => {
     const matchEstado  = filtro === 'TODOS' || p.estado === filtro
@@ -124,6 +127,19 @@ export default function PresupuestosClient({ presupuestos: initial, arquitectos,
   function onSaved() {
     setShowModal(false)
     window.location.reload()
+  }
+
+  async function handleDelete() {
+    if (!deleteId) return
+    setDeleting(true)
+    try {
+      await eliminarPresupuesto(deleteId)
+      setDeleteId(null)
+      window.location.reload()
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Error al eliminar')
+      setDeleting(false)
+    }
   }
 
   const FILTROS: Filtro[] = ['TODOS', 'BORRADOR', 'ENVIADO', 'APROBADO', 'RECHAZADO', 'CONVERTIDO']
@@ -237,6 +253,14 @@ export default function PresupuestosClient({ presupuestos: initial, arquitectos,
                           {p.estado === 'CONVERTIDO' && p.convertido_en_factura_id && (
                             <span className="text-xs text-purple-600 font-medium">✓ Facturado</span>
                           )}
+                          {['BORRADOR', 'RECHAZADO'].includes(p.estado) && (
+                            <button
+                              onClick={() => setDeleteId(p.id)}
+                              className="text-xs text-red-400 hover:text-red-600 ml-1"
+                            >
+                              Eliminar
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -263,6 +287,19 @@ export default function PresupuestosClient({ presupuestos: initial, arquitectos,
           productos={productos}
           onSaved={onSaved}
           onClose={() => setShowModal(false)}
+        />
+      )}
+
+      {/* Confirm eliminar */}
+      {deleteId && (
+        <ConfirmDialog
+          title="Eliminar presupuesto"
+          message="¿Eliminás este presupuesto? Se eliminarán también sus ítems. Esta acción no se puede deshacer."
+          confirmLabel="Eliminar"
+          variant="danger"
+          loading={deleting}
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteId(null)}
         />
       )}
 
