@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { Cliente, Producto, FacturaVenta } from '@/lib/supabase/types'
 import FacturaVentaModal from './FacturaVentaModal'
+import { exportarExcel } from '@/lib/exportar'
 
 type ItemConProducto = {
   id: string
@@ -125,6 +126,22 @@ export default function VentasClient({ facturas: initial, clientes, productos }:
 
         {/* Filtros + búsqueda */}
         <div className="mb-4 flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => {
+              const rows = filtradas.map((f) => ({
+                'Número':          f.numero,
+                'Fecha':           f.fecha,
+                'Cliente':         clienteLabel(f.clientes),
+                'Total':           f.total,
+                'Saldo pendiente': f.saldo_pendiente,
+                'Estado':          ESTADO_LABEL[f.estado] ?? f.estado,
+              }))
+              exportarExcel(rows, 'Ventas', `ventas-${new Date().toISOString().slice(0, 10)}`)
+            }}
+            className="btn-secondary text-sm"
+          >
+            ↓ Exportar Excel
+          </button>
           <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
             {(['TODAS', 'PENDIENTE', 'PARCIAL', 'PAGADA'] as Filtro[]).map((f) => (
               <button

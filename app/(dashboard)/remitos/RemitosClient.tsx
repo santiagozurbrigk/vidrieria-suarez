@@ -214,6 +214,15 @@ export default function RemitosClient({ remitos, clientes, facturasVenta }: Prop
                         {r.estado !== 'PENDIENTE' && (
                           <span className="text-xs text-gray-300 mr-2">—</span>
                         )}
+                        <a
+                          href={`/imprimir/remito/${r.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-gray-400 hover:text-gray-700"
+                          title="Imprimir / PDF"
+                        >
+                          🖨️
+                        </a>
                         <button
                           onClick={() => setDeleteRemito(r)}
                           className="text-xs text-red-400 hover:text-red-600"

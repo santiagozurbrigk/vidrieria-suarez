@@ -253,6 +253,15 @@ export default function PresupuestosClient({ presupuestos: initial, arquitectos,
                           {p.estado === 'CONVERTIDO' && p.convertido_en_factura_id && (
                             <span className="text-xs text-purple-600 font-medium">✓ Facturado</span>
                           )}
+                          <a
+                            href={`/imprimir/presupuesto/${p.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-gray-400 hover:text-gray-700 ml-1"
+                            title="Imprimir / PDF"
+                          >
+                            🖨️
+                          </a>
                           {['BORRADOR', 'RECHAZADO'].includes(p.estado) && (
                             <button
                               onClick={() => setDeleteId(p.id)}
