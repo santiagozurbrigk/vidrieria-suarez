@@ -50,6 +50,23 @@ export async function crearPresupuesto(payload: unknown) {
   }
 }
 
+// ── eliminarPresupuesto ────────────────────────────────────────────────────────
+export async function eliminarPresupuesto(id: string) {
+  const supabase = await createServerClient()
+
+  // Verify it's in a deletable state
+  const { data: pres } = await supabase.from('presupuestos').select('estado').eq('id', id).single()
+  if (!pres) throw new Error('Presupuesto no encontrado')
+  if (!['BORRADOR', 'RECHAZADO'].includes(pres.estado)) {
+    throw new Error('Solo se pueden eliminar presupuestos en estado Borrador o Rechazado')
+  }
+
+  // Delete items first (FK)
+  await supabase.from('presupuesto_items').delete().eq('presupuesto_id', id)
+  const { error } = await supabase.from('presupuestos').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
 // ── actualizarEstado ───────────────────────────────────────────────────────────
 export async function actualizarEstadoPresupuesto(id: string, estado: string) {
   const supabase = await createServerClient()

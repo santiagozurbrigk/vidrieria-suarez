@@ -11,7 +11,7 @@ export default async function VentasPage() {
   ] = await Promise.all([
     supabase
       .from('facturas_venta')
-      .select('*, clientes(nombre, apellido, razon_social)')
+      .select('*, clientes(nombre, apellido, razon_social), factura_venta_items(id, cantidad, precio_unitario, subtotal, productos(nombre, unidad_medida))')
       .order('fecha', { ascending: false })
       .order('created_at', { ascending: false }),
     supabase
