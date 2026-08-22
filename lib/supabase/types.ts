@@ -265,7 +265,7 @@ export type Database = {
         }
         Insert: {
           id?: string; fecha: string; saldo_sistema: number; saldo_real?: number | null
-          estado?: string; notas?: string | null; usuario_id: string
+          diferencia?: number | null; estado?: string; notas?: string | null; usuario_id: string
         }
         Update: { saldo_real?: number | null; diferencia?: number | null; estado?: string; notas?: string | null }
         Relationships: [
@@ -402,3 +402,4 @@ export type CategoriaGasto = Tables<'categorias_gasto'>
 export type Gasto          = Tables<'gastos'>
 export type Pago           = Tables<'pagos'>
 export type PagoFactura    = Tables<'pago_facturas'>
+export type CierreCaja     = Tables<'cierres_caja'>
