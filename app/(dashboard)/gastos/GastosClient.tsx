@@ -5,6 +5,7 @@ import type { Gasto, CategoriaGasto } from '@/lib/supabase/types'
 import GastoModal from './GastoModal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { eliminarGasto } from '@/lib/actions/gastos'
+import { exportarExcel } from '@/lib/exportar'
 
 type GastoConCategoria = Gasto & { categorias_gasto: { nombre: string } | null }
 
@@ -164,6 +165,21 @@ export default function GastosClient({ gastos: initial, categorias }: Props) {
 
         {/* Filtros */}
         <div className="mb-4 flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => {
+              const rows = filtrados.map((g) => ({
+                'Fecha':         g.fecha,
+                'Categoría':     g.categorias_gasto?.nombre ?? '—',
+                'Concepto':      g.concepto,
+                'Medio de pago': g.medio_pago ?? '—',
+                'Monto':         g.monto,
+              }))
+              exportarExcel(rows, 'Gastos', `gastos-${anio}-${String(mes).padStart(2, '0')}`)
+            }}
+            className="btn-secondary text-sm"
+          >
+            ↓ Exportar Excel
+          </button>
           <select
             value={catId}
             onChange={(e) => setCatId(e.target.value)}
