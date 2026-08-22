@@ -108,6 +108,21 @@ export type Database = {
           { foreignKeyName: "facturas_compra_created_by_fkey"; columns: ["created_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
         ]
       }
+      factura_venta_items: {
+        Row: {
+          id: string; factura_venta_id: string; producto_id: string
+          cantidad: number; precio_unitario: number; subtotal: number; created_at: string
+        }
+        Insert: {
+          id?: string; factura_venta_id: string; producto_id: string
+          cantidad: number; precio_unitario: number; subtotal: number
+        }
+        Update: { cantidad?: number; precio_unitario?: number; subtotal?: number }
+        Relationships: [
+          { foreignKeyName: "factura_venta_items_factura_venta_id_fkey"; columns: ["factura_venta_id"]; isOneToOne: false; referencedRelation: "facturas_venta"; referencedColumns: ["id"] },
+          { foreignKeyName: "factura_venta_items_producto_id_fkey"; columns: ["producto_id"]; isOneToOne: false; referencedRelation: "productos"; referencedColumns: ["id"] },
+        ]
+      }
       factura_compra_items: {
         Row: {
           id: string; factura_compra_id: string; producto_id: string
