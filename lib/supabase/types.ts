@@ -330,6 +330,25 @@ export type Database = {
           { foreignKeyName: "pago_facturas_factura_compra_id_fkey"; columns: ["factura_compra_id"]; isOneToOne: false; referencedRelation: "facturas_compra"; referencedColumns: ["id"] },
         ]
       }
+      remitos: {
+        Row: {
+          id: string; cliente_id: string; factura_venta_id: string | null
+          numero: string; fecha: string; estado: string
+          archivo_adjunto_path: string | null; notas: string | null
+          created_by: string; created_at: string
+        }
+        Insert: {
+          id?: string; cliente_id: string; factura_venta_id?: string | null
+          numero: string; fecha?: string; estado?: string
+          archivo_adjunto_path?: string | null; notas?: string | null; created_by: string
+        }
+        Update: { estado?: string; notas?: string | null; factura_venta_id?: string | null }
+        Relationships: [
+          { foreignKeyName: "remitos_cliente_id_fkey"; columns: ["cliente_id"]; isOneToOne: false; referencedRelation: "clientes"; referencedColumns: ["id"] },
+          { foreignKeyName: "remitos_factura_venta_id_fkey"; columns: ["factura_venta_id"]; isOneToOne: false; referencedRelation: "facturas_venta"; referencedColumns: ["id"] },
+          { foreignKeyName: "remitos_created_by_fkey"; columns: ["created_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
       audit_log: {
         Row: {
           id: number; usuario_id: string | null; accion: string; entidad: string
@@ -403,3 +422,4 @@ export type Gasto          = Tables<'gastos'>
 export type Pago           = Tables<'pagos'>
 export type PagoFactura    = Tables<'pago_facturas'>
 export type CierreCaja     = Tables<'cierres_caja'>
+export type Remito         = Tables<'remitos'>
