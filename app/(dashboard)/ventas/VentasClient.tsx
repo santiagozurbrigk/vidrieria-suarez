@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { Cliente, Producto, FacturaVenta } from '@/lib/supabase/types'
 import FacturaVentaModal from './FacturaVentaModal'
+import CobroModal from './CobroModal'
 import { exportarExcel } from '@/lib/exportar'
 
 type ItemConProducto = {
@@ -58,6 +59,7 @@ export default function VentasClient({ facturas: initial, clientes, productos }:
   const [busqueda, setBusqueda]   = useState('')
   const [showModal, setShowModal] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [cobroFactura, setCobroFactura] = useState<FacturaConCliente | null>(null)
 
   const filtradas = facturas.filter((f) => {
     const matchEstado  = filtro === 'TODAS' || f.estado === filtro
@@ -213,37 +215,59 @@ export default function VentasClient({ facturas: initial, clientes, productos }:
                           </span>
                         </td>
                       </tr>
-                      {isExpanded && items.length > 0 && (
+                      {isExpanded && (
                         <tr key={`${f.id}-items`} className="bg-blue-50">
                           <td colSpan={7} className="px-8 py-3">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="text-left text-xs text-blue-700 border-b border-blue-100">
-                                  <th className="pb-1.5 font-medium">Producto</th>
-                                  <th className="pb-1.5 font-medium text-right">Cantidad</th>
-                                  <th className="pb-1.5 font-medium text-right">Precio unit.</th>
-                                  <th className="pb-1.5 font-medium text-right">Subtotal</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {items.map((item) => (
-                                  <tr key={item.id} className="border-b border-blue-50 last:border-0">
-                                    <td className="py-1.5 text-gray-800 font-medium">
-                                      {item.productos?.nombre ?? '—'}
-                                    </td>
-                                    <td className="py-1.5 text-right text-gray-600">
-                                      {item.cantidad} {item.productos ? UNIDADES[item.productos.unidad_medida] ?? item.productos.unidad_medida : ''}
-                                    </td>
-                                    <td className="py-1.5 text-right text-gray-600">
-                                      {formatCurrency(item.precio_unitario)}
-                                    </td>
-                                    <td className="py-1.5 text-right font-semibold text-gray-900">
-                                      {formatCurrency(item.subtotal)}
-                                    </td>
+                            {items.length > 0 && (
+                              <table className="w-full text-sm mb-3">
+                                <thead>
+                                  <tr className="text-left text-xs text-blue-700 border-b border-blue-100">
+                                    <th className="pb-1.5 font-medium">Producto</th>
+                                    <th className="pb-1.5 font-medium text-right">Cantidad</th>
+                                    <th className="pb-1.5 font-medium text-right">Precio unit.</th>
+                                    <th className="pb-1.5 font-medium text-right">Subtotal</th>
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                                </thead>
+                                <tbody>
+                                  {items.map((item) => (
+                                    <tr key={item.id} className="border-b border-blue-50 last:border-0">
+                                      <td className="py-1.5 text-gray-800 font-medium">
+                                        {item.productos?.nombre ?? '—'}
+                                      </td>
+                                      <td className="py-1.5 text-right text-gray-600">
+                                        {item.cantidad} {item.productos ? UNIDADES[item.productos.unidad_medida] ?? item.productos.unidad_medida : ''}
+                                      </td>
+                                      <td className="py-1.5 text-right text-gray-600">
+                                        {formatCurrency(item.precio_unitario)}
+                                      </td>
+                                      <td className="py-1.5 text-right font-semibold text-gray-900">
+                                        {formatCurrency(item.subtotal)}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                            {/* Acciones de la factura */}
+                            <div className="flex items-center gap-3 pt-1 border-t border-blue-100">
+                              {f.estado !== 'PAGADA' && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setCobroFactura(f) }}
+                                  className="text-xs font-medium px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-700"
+                                >
+                                  💰 Registrar cobro
+                                </button>
+                              )}
+                              <a
+                                href={`/imprimir/factura/${f.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-xs text-gray-500 hover:text-gray-800"
+                              >
+                                🖨️ Imprimir factura
+                              </a>
+                            </div>
                           </td>
                         </tr>
                       )}
@@ -270,6 +294,14 @@ export default function VentasClient({ facturas: initial, clientes, productos }:
           productos={productos}
           onSaved={onSaved}
           onClose={() => setShowModal(false)}
+        />
+      )}
+
+      {cobroFactura && (
+        <CobroModal
+          factura={cobroFactura}
+          onSaved={() => { setCobroFactura(null); window.location.reload() }}
+          onClose={() => setCobroFactura(null)}
         />
       )}
     </>
