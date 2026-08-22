@@ -60,12 +60,12 @@ function SuggestionPanel({ sugeridos, productos, currentItems, onAgregar }: Sugg
     ),
   )
 
-  const pendientes = sugeridos.filter((_, i) => {
+  // Hide the panel only once every suggested item has been added
+  const allAdded = sugeridos.length > 0 && sugeridos.every((_, i) => {
     const pid = selects[i]
-    return pid && !currentItems.find((x) => x.producto_id === pid)
+    return !!pid && !!currentItems.find((x) => x.producto_id === pid)
   })
-
-  if (pendientes.length === 0 && sugeridos.length > 0) return null
+  if (allAdded) return null
 
   return (
     <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
