@@ -77,3 +77,64 @@ export async function registrarFacturaVenta(payload: unknown) {
   revalidatePath('/stock')
   return factura
 }
+
+const cobroSchema = z.object({
+  factura_id: z.string().uuid(),
+  monto: z.coerce.number().positive(),
+  medio_pago: z.string().min(1),
+  fecha: z.string(),
+  notas: z.string().optional(),
+})
+
+export async function registrarCobroVenta(payload: unknown) {
+  const data = cobroSchema.parse(payload)
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('No autenticado')
+
+  // Validar factura y saldo
+  const { data: factura, error: facturaErr } = await supabase
+    .from('facturas_venta')
+    .select('id, cliente_id, saldo_pendiente, estado')
+    .eq('id', data.factura_id)
+    .single()
+
+  if (facturaErr || !factura) throw new Error('Factura no encontrada')
+  if (factura.estado === 'PAGADA') throw new Error('La factura ya está completamente pagada')
+  if (data.monto > factura.saldo_pendiente + 0.01)
+    throw new Error(`El monto (${data.monto}) supera el saldo pendiente (${factura.saldo_pendiente})`)
+
+  // Crear pago — el trigger fn_cobro_a_caja generará el movimiento INGRESO en caja
+  const { data: pago, error: pagoErr } = await supabase
+    .from('pagos')
+    .insert({
+      tipo: 'COBRO_CLIENTE',
+      cliente_id: factura.cliente_id,
+      monto: data.monto,
+      medio_pago: data.medio_pago,
+      fecha: data.fecha,
+      notas: data.notas ?? null,
+      created_by: user.id,
+    })
+    .select()
+    .single()
+
+  if (pagoErr) throw new Error(pagoErr.message)
+
+  // Imputar a la factura — el trigger fn_actualizar_saldo_factura actualiza saldo_pendiente y estado
+  const { error: pfErr } = await supabase
+    .from('pago_facturas')
+    .insert({
+      pago_id: pago.id,
+      factura_venta_id: data.factura_id,
+      monto_imputado: data.monto,
+    })
+
+  if (pfErr) {
+    await supabase.from('pagos').delete().eq('id', pago.id)
+    throw new Error(pfErr.message)
+  }
+
+  revalidatePath('/ventas')
+  revalidatePath('/caja')
+}
