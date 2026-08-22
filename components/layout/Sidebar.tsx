@@ -11,6 +11,7 @@ const navItems = [
   { href: '/proveedores',  label: 'Proveedores',    icon: '🏭' },
   { href: '/precios',      label: 'Lista de Precios', icon: '💲' },
   { href: '/ventas',        label: 'Ventas',          icon: '🧾' },
+  { href: '/presupuestos', label: 'Presupuestos',   icon: '📄' },
   { href: '/clientes',     label: 'Clientes',       icon: '👥' },
   { href: '/arquitectos',  label: 'Arquitectos',    icon: '📐' },
   { href: '/pagos',        label: 'Pagos',          icon: '💳' },

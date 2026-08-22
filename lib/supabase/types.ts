@@ -216,11 +216,27 @@ export type Database = {
           numero: string; fecha?: string; validez_dias?: number; total?: number; estado?: string
           notas?: string | null; created_by: string
         }
-        Update: { obra?: string | null; validez_dias?: number; estado?: string; notas?: string | null }
+        Update: { obra?: string | null; validez_dias?: number; estado?: string; notas?: string | null; convertido_en_factura_id?: string | null }
         Relationships: [
           { foreignKeyName: "presupuestos_arquitecto_id_fkey"; columns: ["arquitecto_id"]; isOneToOne: false; referencedRelation: "arquitectos"; referencedColumns: ["id"] },
           { foreignKeyName: "presupuestos_cliente_id_fkey"; columns: ["cliente_id"]; isOneToOne: false; referencedRelation: "clientes"; referencedColumns: ["id"] },
           { foreignKeyName: "presupuestos_created_by_fkey"; columns: ["created_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
+      presupuesto_items: {
+        Row: {
+          id: string; presupuesto_id: string; producto_id: string | null
+          descripcion: string; cantidad: number; precio_unitario: number; subtotal: number
+          created_at: string
+        }
+        Insert: {
+          id?: string; presupuesto_id: string; producto_id?: string | null
+          descripcion: string; cantidad: number; precio_unitario: number; subtotal: number
+        }
+        Update: { descripcion?: string; cantidad?: number; precio_unitario?: number; subtotal?: number }
+        Relationships: [
+          { foreignKeyName: "presupuesto_items_presupuesto_id_fkey"; columns: ["presupuesto_id"]; isOneToOne: false; referencedRelation: "presupuestos"; referencedColumns: ["id"] },
+          { foreignKeyName: "presupuesto_items_producto_id_fkey"; columns: ["producto_id"]; isOneToOne: false; referencedRelation: "productos"; referencedColumns: ["id"] },
         ]
       }
       movimientos_caja: {
