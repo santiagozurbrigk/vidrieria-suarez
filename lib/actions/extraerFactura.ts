@@ -65,35 +65,41 @@ export async function extraerFacturaDesdeArchivo(formData: FormData): Promise<Fa
 
   let text: string
 
-  if (mediaType === 'application/pdf') {
-    const docBlock: BetaRequestDocumentBlock = {
-      type: 'document',
-      source: { type: 'base64', media_type: 'application/pdf', data: base64 },
+  try {
+    if (mediaType === 'application/pdf') {
+      const docBlock: BetaRequestDocumentBlock = {
+        type: 'document',
+        source: { type: 'base64', media_type: 'application/pdf', data: base64 },
+      }
+      const response = await client.beta.messages.create({
+        model: 'claude-opus-5',
+        max_tokens: 1024,
+        betas: ['pdfs-2024-09-25'],
+        messages: [{
+          role: 'user',
+          content: [docBlock, { type: 'text', text: PROMPT }],
+        }],
+      })
+      text = response.content.find((b) => b.type === 'text')?.text ?? ''
+    } else {
+      const imageMediaType = mediaType as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif'
+      const response = await client.messages.create({
+        model: 'claude-opus-5',
+        max_tokens: 1024,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: base64 } },
+            { type: 'text', text: PROMPT },
+          ],
+        }],
+      })
+      text = response.content.find((b) => b.type === 'text')?.text ?? ''
     }
-    const response = await client.beta.messages.create({
-      model: 'claude-opus-4-5',
-      max_tokens: 1024,
-      betas: ['pdfs-2024-09-25'],
-      messages: [{
-        role: 'user',
-        content: [docBlock, { type: 'text', text: PROMPT }],
-      }],
-    })
-    text = response.content.find((b) => b.type === 'text')?.text ?? ''
-  } else {
-    const imageMediaType = mediaType as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif'
-    const response = await client.messages.create({
-      model: 'claude-opus-4-5',
-      max_tokens: 1024,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: base64 } },
-          { type: 'text', text: PROMPT },
-        ],
-      }],
-    })
-    text = response.content.find((b) => b.type === 'text')?.text ?? ''
+  } catch (apiErr: unknown) {
+    // Re-throw as a plain Error so Next.js can serialize it back to the client
+    const msg = apiErr instanceof Error ? apiErr.message : String(apiErr)
+    throw new Error(`Error al consultar la IA: ${msg}`)
   }
 
   const jsonMatch = text.match(/\{[\s\S]*\}/)
