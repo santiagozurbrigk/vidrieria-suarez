@@ -9,6 +9,7 @@ const navItems = [
   { href: '/',             label: 'Inicio',        icon: '🏠' },
   { href: '/stock',        label: 'Stock',          icon: '📦' },
   { href: '/proveedores',  label: 'Proveedores',    icon: '🏭' },
+  { href: '/compras',      label: 'Compras',         icon: '🛒' },
   { href: '/precios',      label: 'Lista de Precios', icon: '💲' },
   { href: '/ventas',        label: 'Ventas',          icon: '🧾' },
   { href: '/presupuestos', label: 'Presupuestos',   icon: '📄' },
