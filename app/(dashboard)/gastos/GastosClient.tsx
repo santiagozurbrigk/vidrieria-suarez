@@ -1,13 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import type { Gasto, CategoriaGasto } from '@/lib/supabase/types'
-import { registrarGasto } from '@/lib/actions/gastos'
+import GastoModal from './GastoModal'
 
 type GastoConCategoria = Gasto & { categorias_gasto: { nombre: string } | null }
 
 type Props = {
-  gastos: GastoConCategoria[]
+  gastos:     GastoConCategoria[]
   categorias: CategoriaGasto[]
 }
 
@@ -15,137 +15,205 @@ function formatCurrency(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 }
 
+function mesLabel(yyyy: number, mm: number) {
+  return new Date(yyyy, mm - 1, 1).toLocaleString('es-AR', { month: 'long', year: 'numeric' })
+}
+
 export default function GastosClient({ gastos: initial, categorias }: Props) {
-  const [gastos, setGastos] = useState(initial)
-  const [showForm, setShowForm] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [gastos]        = useState(initial)
+  const [showModal, setShowModal] = useState(false)
 
-  const totalMes = gastos
-    .filter((g) => {
-      const fecha = new Date(g.fecha)
-      const hoy = new Date()
-      return fecha.getMonth() === hoy.getMonth() && fecha.getFullYear() === hoy.getFullYear()
+  // Filtros
+  const hoy    = new Date()
+  const [anio, setAnio]     = useState(hoy.getFullYear())
+  const [mes,  setMes]      = useState(hoy.getMonth() + 1)
+  const [catId, setCatId]   = useState<string>('TODAS')
+  const [busqueda, setBusqueda] = useState('')
+
+  // Lista de meses disponibles (desde el primer gasto hasta hoy)
+  const mesesDisponibles = useMemo(() => {
+    const set = new Set<string>()
+    gastos.forEach((g) => {
+      const d = g.fecha.slice(0, 7) // 'YYYY-MM'
+      set.add(d)
     })
-    .reduce((s, g) => s + g.monto, 0)
+    // Siempre incluir el mes actual
+    set.add(`${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`)
+    return Array.from(set).sort().reverse()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gastos])
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setError(null)
-    setLoading(true)
-    const fd = new FormData(e.currentTarget)
-    try {
-      const nuevo = await registrarGasto(fd)
-      if (nuevo) {
-        const cat = categorias.find((c) => c.id === nuevo.categoria_id)
-        setGastos((prev) => [{ ...nuevo, categorias_gasto: cat ? { nombre: cat.nombre } : null }, ...prev])
-        setShowForm(false)
-        ;(e.target as HTMLFormElement).reset()
-      }
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error al registrar gasto')
-    } finally {
-      setLoading(false)
-    }
+  // Gastos filtrados
+  const filtrados = useMemo(() => {
+    const mesStr = `${anio}-${String(mes).padStart(2, '0')}`
+    return gastos.filter((g) => {
+      const matchMes    = g.fecha.startsWith(mesStr)
+      const matchCat    = catId === 'TODAS' || g.categoria_id === catId
+      const matchSearch = busqueda === '' ||
+        g.concepto.toLowerCase().includes(busqueda.toLowerCase()) ||
+        (g.categorias_gasto?.nombre ?? '').toLowerCase().includes(busqueda.toLowerCase())
+      return matchMes && matchCat && matchSearch
+    })
+  }, [gastos, anio, mes, catId, busqueda])
+
+  // Totales por categoría del período filtrado (antes del filtro de catId)
+  const mesStr = `${anio}-${String(mes).padStart(2, '0')}`
+  const gastosMes = gastos.filter((g) => g.fecha.startsWith(mesStr))
+  const totalMes = gastosMes.reduce((s, g) => s + g.monto, 0)
+
+  const porCategoria = useMemo(() => {
+    const map = new Map<string, { nombre: string; total: number }>()
+    gastosMes.forEach((g) => {
+      const nombre = g.categorias_gasto?.nombre ?? 'Sin categoría'
+      const prev   = map.get(g.categoria_id) ?? { nombre, total: 0 }
+      map.set(g.categoria_id, { nombre, total: prev.total + g.monto })
+    })
+    return Array.from(map.values()).sort((a, b) => b.total - a.total)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gastos, anio, mes])
+
+  function onSaved() {
+    setShowModal(false)
+    window.location.reload()
   }
 
   return (
-    <div>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Gastos</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Total mes actual: <strong className="text-red-600">{formatCurrency(totalMes)}</strong>
-          </p>
+    <>
+      <div>
+        {/* Header */}
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Gastos</h1>
+            <p className="text-sm text-gray-500 mt-1">
+              Gastos operativos. Cada registro genera un egreso de caja automáticamente.
+            </p>
+          </div>
+          <button onClick={() => setShowModal(true)} className="btn-primary shrink-0">
+            + Nuevo gasto
+          </button>
         </div>
-        <button onClick={() => setShowForm(!showForm)} className="btn-primary">
-          {showForm ? 'Cancelar' : '+ Nuevo gasto'}
-        </button>
-      </div>
 
-      {/* Formulario inline */}
-      {showForm && (
-        <div className="card mb-5">
-          <h2 className="mb-4 text-sm font-semibold text-gray-700">Registrar gasto</h2>
-          <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <div className="col-span-2 md:col-span-1">
-              <label className="label">Categoría *</label>
-              <select name="categoria_id" required className="input">
-                <option value="">— Seleccionar —</option>
-                {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-              </select>
+        {/* Selector de período + resumen */}
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start">
+          {/* Selector de mes */}
+          <div className="card p-4 sm:w-56 shrink-0">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Período</p>
+            <select
+              value={`${anio}-${String(mes).padStart(2, '0')}`}
+              onChange={(e) => {
+                const [y, m] = e.target.value.split('-')
+                setAnio(parseInt(y)); setMes(parseInt(m))
+              }}
+              className="input text-sm"
+            >
+              {mesesDisponibles.map((ym) => {
+                const [y, m] = ym.split('-')
+                return <option key={ym} value={ym}>{mesLabel(parseInt(y), parseInt(m))}</option>
+              })}
+            </select>
+            <div className="mt-3 flex justify-between items-baseline">
+              <span className="text-xs text-gray-500">Total período</span>
+              <span className="text-lg font-bold text-red-600">{formatCurrency(totalMes)}</span>
             </div>
-            <div className="col-span-2 md:col-span-2">
-              <label className="label">Concepto *</label>
-              <input name="concepto" required className="input" placeholder="Descripción del gasto" />
+          </div>
+
+          {/* Breakdown por categoría */}
+          {porCategoria.length > 0 && (
+            <div className="card p-4 flex-1 min-w-0">
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Por categoría</p>
+              <div className="space-y-2">
+                {porCategoria.map((cat) => {
+                  const pct = totalMes > 0 ? (cat.total / totalMes) * 100 : 0
+                  return (
+                    <div key={cat.nombre}>
+                      <div className="flex justify-between text-sm mb-0.5">
+                        <span className="text-gray-700 truncate">{cat.nombre}</span>
+                        <span className="font-medium text-gray-900 ml-2 shrink-0">{formatCurrency(cat.total)}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-gray-100">
+                        <div
+                          className="h-1.5 rounded-full bg-purple-500 transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
-            <div>
-              <label className="label">Monto *</label>
-              <input name="monto" type="number" step="0.01" min="0.01" required className="input" />
-            </div>
-            <div>
-              <label className="label">Fecha *</label>
-              <input name="fecha" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required className="input" />
-            </div>
-            <div>
-              <label className="label">Medio de pago</label>
-              <select name="medio_pago" className="input">
-                <option value="EFECTIVO">Efectivo</option>
-                <option value="TRANSFERENCIA">Transferencia</option>
-                <option value="TARJETA">Tarjeta</option>
-                <option value="CHEQUE">Cheque</option>
-              </select>
-            </div>
-            <div className="col-span-2">
-              <label className="label">Notas</label>
-              <input name="notas" className="input" />
-            </div>
-            <div className="col-span-2 md:col-span-4 flex justify-end gap-3">
-              {error && <p className="flex-1 text-sm text-red-600">{error}</p>}
-              <button type="submit" disabled={loading} className="btn-primary">
-                {loading ? 'Registrando...' : 'Registrar gasto'}
-              </button>
-            </div>
-          </form>
+          )}
         </div>
-      )}
 
-      {/* Tabla */}
-      <div className="card overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="border-b border-gray-100 bg-gray-50">
-              <tr>
-                <th className="table-th">Fecha</th>
-                <th className="table-th">Categoría</th>
-                <th className="table-th">Concepto</th>
-                <th className="table-th">Medio de pago</th>
-                <th className="table-th text-right">Monto</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {gastos.map((g) => (
-                <tr key={g.id} className="hover:bg-gray-50">
-                  <td className="table-td text-gray-500 text-xs">{g.fecha}</td>
-                  <td className="table-td">
-                    <span className="badge bg-purple-100 text-purple-700">
-                      {g.categorias_gasto?.nombre ?? '—'}
-                    </span>
-                  </td>
-                  <td className="table-td font-medium text-gray-900">{g.concepto}</td>
-                  <td className="table-td text-gray-500">{g.medio_pago ?? '—'}</td>
-                  <td className="table-td text-right font-semibold text-red-600">{formatCurrency(g.monto)}</td>
-                </tr>
-              ))}
-              {gastos.length === 0 && (
+        {/* Filtros */}
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <select
+            value={catId}
+            onChange={(e) => setCatId(e.target.value)}
+            className="input w-48 text-sm"
+          >
+            <option value="TODAS">Todas las categorías</option>
+            {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+          </select>
+          <input
+            type="text"
+            placeholder="Buscar por concepto..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            className="input w-56"
+          />
+          <span className="text-sm text-gray-400">
+            {filtrados.length} resultado{filtrados.length !== 1 ? 's' : ''} ·{' '}
+            <strong className="text-red-600">{formatCurrency(filtrados.reduce((s, g) => s + g.monto, 0))}</strong>
+          </span>
+        </div>
+
+        {/* Tabla */}
+        <div className="card overflow-hidden p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="border-b border-gray-100 bg-gray-50">
                 <tr>
-                  <td colSpan={5} className="py-10 text-center text-sm text-gray-400">No hay gastos registrados.</td>
+                  <th className="table-th">Fecha</th>
+                  <th className="table-th">Categoría</th>
+                  <th className="table-th">Concepto</th>
+                  <th className="table-th">Medio de pago</th>
+                  <th className="table-th text-right">Monto</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {filtrados.map((g) => (
+                  <tr key={g.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="table-td text-gray-500 text-sm">{g.fecha}</td>
+                    <td className="table-td">
+                      <span className="badge bg-purple-100 text-purple-700">
+                        {g.categorias_gasto?.nombre ?? '—'}
+                      </span>
+                    </td>
+                    <td className="table-td font-medium text-gray-900">{g.concepto}</td>
+                    <td className="table-td text-gray-500 text-sm">{g.medio_pago ?? '—'}</td>
+                    <td className="table-td text-right font-semibold text-red-600">{formatCurrency(g.monto)}</td>
+                  </tr>
+                ))}
+                {filtrados.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-12 text-center text-sm text-gray-400">
+                      No hay gastos en este período.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </div>
+
+      {showModal && (
+        <GastoModal
+          categorias={categorias}
+          onSaved={onSaved}
+          onClose={() => setShowModal(false)}
+        />
+      )}
+    </>
   )
 }
