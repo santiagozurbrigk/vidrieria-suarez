@@ -2,16 +2,17 @@
 
 import { useRef, useState } from 'react'
 import type { Proveedor, Producto } from '@/lib/supabase/types'
-import { registrarFacturaCompra } from '@/lib/actions/proveedores'
-import { extraerFacturaDesdeArchivo, type FacturaExtraida, type ItemExtraido } from '@/lib/actions/extraerFactura'
+import { registrarFacturaCompraConNuevosProductos } from '@/lib/actions/proveedores'
+import { extraerFacturaDesdeArchivo, type ItemExtraido } from '@/lib/actions/extraerFactura'
 
 type Item = {
-  producto_id: string
-  nombre: string
+  producto_id: string   // UUID si existe en DB; '' si es producto nuevo
+  nombre: string        // nombre editable (útil para corregir OCR en productos nuevos)
   unidad_medida: string
   cantidad: number
   costo_unitario: number
   subtotal: number
+  isNew: boolean        // true = no existe en DB, se creará al registrar la factura
 }
 
 type Props = {
@@ -27,7 +28,7 @@ function formatCurrency(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 }
 
-/** Find best-matching product by name (simple lowercase includes) */
+/** Intenta encontrar el producto con nombre más similar al texto extraído por la IA */
 function matchProduct(
   nombre: string,
   productos: Pick<Producto, 'id' | 'nombre' | 'unidad_medida' | 'costo_actual'>[],
@@ -40,89 +41,7 @@ function matchProduct(
 }
 
 // ────────────────────────────────────────────────────────────────
-// Sub-component: panel with unmatched extracted items
-// ────────────────────────────────────────────────────────────────
-type SuggestionPanelProps = {
-  sugeridos: ItemExtraido[]
-  productos: Pick<Producto, 'id' | 'nombre' | 'unidad_medida' | 'costo_actual'>[]
-  currentItems: Item[]
-  onAgregar: (item: Item) => void
-}
-
-function SuggestionPanel({ sugeridos, productos, currentItems, onAgregar }: SuggestionPanelProps) {
-  // Local state per suggestion: selected product id override
-  const [selects, setSelects] = useState<Record<number, string>>(() =>
-    Object.fromEntries(
-      sugeridos.map((s, i) => {
-        const match = matchProduct(s.nombre, productos)
-        return [i, match?.id ?? '']
-      }),
-    ),
-  )
-
-  const pendientes = sugeridos.filter((_, i) => {
-    const pid = selects[i]
-    return pid && !currentItems.find((x) => x.producto_id === pid)
-  })
-
-  if (pendientes.length === 0 && sugeridos.length > 0) return null
-
-  return (
-    <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-3">
-      <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
-        Ítems detectados por IA — asociá cada uno a un producto
-      </p>
-      {sugeridos.map((s, i) => {
-        const pid = selects[i]
-        const yaAgregado = !!pid && !!currentItems.find((x) => x.producto_id === pid)
-        const prod = productos.find((p) => p.id === pid)
-
-        return (
-          <div key={i} className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-blue-800 flex-shrink-0 w-36 truncate" title={s.nombre}>
-              {s.nombre}
-            </span>
-            <select
-              value={pid}
-              onChange={(e) => setSelects((prev) => ({ ...prev, [i]: e.target.value }))}
-              className="input text-xs flex-1 min-w-0"
-              disabled={yaAgregado}
-            >
-              <option value="">— sin coincidencia —</option>
-              {productos.map((p) => (
-                <option key={p.id} value={p.id}>{p.nombre}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              disabled={!pid || yaAgregado}
-              onClick={() => {
-                if (!prod) return
-                onAgregar({
-                  producto_id: prod.id,
-                  nombre: prod.nombre,
-                  unidad_medida: prod.unidad_medida,
-                  cantidad: s.cantidad,
-                  costo_unitario: s.costo_unitario,
-                  subtotal: s.cantidad * s.costo_unitario,
-                })
-              }}
-              className={`flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition
-                ${yaAgregado
-                  ? 'bg-green-100 text-green-700 cursor-default'
-                  : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40'}`}
-            >
-              {yaAgregado ? '✓ Agregado' : 'Agregar'}
-            </button>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// ────────────────────────────────────────────────────────────────
-// Main modal
+// Modal principal
 // ────────────────────────────────────────────────────────────────
 export default function FacturaCompraModal({ proveedor, productos, onSaved, onClose }: Props) {
   const [items, setItems] = useState<Item[]>([])
@@ -130,13 +49,13 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // AI extraction state
+  // Estado de extracción IA
   const [extracting, setExtracting] = useState(false)
   const [extractError, setExtractError] = useState<string | null>(null)
-  const [sugeridos, setSugeridos] = useState<ItemExtraido[] | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
+  const [iaResumen, setIaResumen] = useState<{ existentes: number; nuevos: number } | null>(null)
 
-  // Controlled header fields (so IA can pre-fill them)
+  // Campos de cabecera controlados (la IA los rellena automáticamente)
   const [numero, setNumero] = useState('')
   const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10))
   const [tipoComprobante, setTipoComprobante] = useState('FACTURA')
@@ -147,7 +66,7 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
   const subtotal = items.reduce((s, i) => s + i.subtotal, 0)
   const total = subtotal + iva
 
-  // ── AI extraction ──
+  // ── Extracción IA + auto-población de ítems ──────────────────────────────
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -161,31 +80,87 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
     setFileName(file.name)
     setExtractError(null)
     setExtracting(true)
-    setSugeridos(null)
+    setIaResumen(null)
 
-    try {
-      const fd = new FormData()
-      fd.append('archivo', file)
-      const data: FacturaExtraida = await extraerFacturaDesdeArchivo(fd)
+    const fd = new FormData()
+    fd.append('archivo', file)
+    const result = await extraerFacturaDesdeArchivo(fd)
 
-      // Pre-fill header fields
-      if (data.numero) setNumero(data.numero)
-      if (data.fecha) setFecha(data.fecha)
-      if (data.tipo_comprobante) setTipoComprobante(data.tipo_comprobante)
-      if (data.iva != null) setIva(data.iva)
-      if (data.notas) setNotas(data.notas)
-
-      setSugeridos(data.items ?? [])
-    } catch (err: unknown) {
-      setExtractError(err instanceof Error ? err.message : 'Error al procesar el archivo')
-    } finally {
+    if (!result.ok) {
+      setExtractError(result.error)
       setExtracting(false)
-      // Reset input so same file can be re-uploaded
       if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+
+    const data = result.data
+
+    // Pre-rellenar cabecera
+    if (data.numero) setNumero(data.numero)
+    if (data.fecha) setFecha(data.fecha)
+    if (data.tipo_comprobante) setTipoComprobante(data.tipo_comprobante)
+    if (data.iva != null) setIva(data.iva)
+    if (data.notas) setNotas(data.notas)
+
+    // Auto-poblar ítems: detectados → tabla directamente
+    autoPopularItems(data.items ?? [])
+
+    setExtracting(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  /**
+   * Para cada ítem extraído por la IA:
+   *   - Si coincide con un producto existente → lo agrega con su ID
+   *   - Si no coincide → lo agrega como producto nuevo (isNew: true)
+   * Omite duplicados ya presentes en la tabla.
+   */
+  function autoPopularItems(sugeridos: ItemExtraido[]) {
+    const nuevos: Item[] = []
+
+    for (const s of sugeridos) {
+      const match = matchProduct(s.nombre, productos)
+
+      if (match) {
+        // Ya en la tabla → omitir
+        if (items.find((x) => x.producto_id === match.id)) continue
+        nuevos.push({
+          producto_id: match.id,
+          nombre: match.nombre,
+          unidad_medida: match.unidad_medida,
+          cantidad: s.cantidad,
+          costo_unitario: s.costo_unitario,
+          subtotal: s.cantidad * s.costo_unitario,
+          isNew: false,
+        })
+      } else {
+        // Producto nuevo — omitir si ya hay uno con mismo nombre
+        if (nuevos.find((x) => x.isNew && x.nombre.toLowerCase() === s.nombre.toLowerCase())) continue
+        if (items.find((x) => x.isNew && x.nombre.toLowerCase() === s.nombre.toLowerCase())) continue
+        nuevos.push({
+          producto_id: '',
+          nombre: s.nombre,
+          unidad_medida: 'UNIDAD',
+          cantidad: s.cantidad,
+          costo_unitario: s.costo_unitario,
+          subtotal: s.cantidad * s.costo_unitario,
+          isNew: true,
+        })
+      }
+    }
+
+    if (nuevos.length > 0) {
+      setItems((prev) => [...prev, ...nuevos])
+      setIaResumen({
+        existentes: nuevos.filter((x) => !x.isNew).length,
+        nuevos: nuevos.filter((x) => x.isNew).length,
+      })
+    } else if (sugeridos.length > 0) {
+      setIaResumen({ existentes: 0, nuevos: 0 })
     }
   }
 
-  // ── Manual item management ──
+  // ── Gestión manual de ítems ──────────────────────────────────────────────
   function agregarItem(productoId: string) {
     const p = productos.find((x) => x.id === productoId)
     if (!p || items.find((x) => x.producto_id === productoId)) return
@@ -196,12 +171,8 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
       cantidad: 1,
       costo_unitario: p.costo_actual,
       subtotal: p.costo_actual,
+      isNew: false,
     }])
-  }
-
-  function agregarItemDesdeIA(item: Item) {
-    if (items.find((x) => x.producto_id === item.producto_id)) return
-    setItems((prev) => [...prev, item])
   }
 
   function updateItem(idx: number, field: 'cantidad' | 'costo_unitario', value: number) {
@@ -213,18 +184,36 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
     }))
   }
 
+  function updateItemNombre(idx: number, nombre: string) {
+    setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, nombre } : item)))
+  }
+
   function removeItem(idx: number) {
     setItems((prev) => prev.filter((_, i) => i !== idx))
   }
 
-  // ── Submit ──
+  // ── Envío ─────────────────────────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
     if (items.length === 0) { setError('Agregá al menos un producto.'); return }
+
+    const nuevosSinNombre = items.filter((x) => x.isNew && !x.nombre.trim())
+    if (nuevosSinNombre.length > 0) {
+      setError('Completá el nombre de los productos nuevos (marcados con 🆕).')
+      return
+    }
+
     setLoading(true)
     try {
-      await registrarFacturaCompra({
+      // Mapear ítems al formato del server action
+      const itemsPayload = items.map((item) =>
+        item.isNew
+          ? { nombre_nuevo: item.nombre.trim(), cantidad: item.cantidad, costo_unitario: item.costo_unitario, subtotal: item.subtotal }
+          : { producto_id: item.producto_id, cantidad: item.cantidad, costo_unitario: item.costo_unitario, subtotal: item.subtotal },
+      )
+
+      await registrarFacturaCompraConNuevosProductos({
         proveedor_id: proveedor.id,
         numero,
         fecha,
@@ -233,7 +222,7 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
         iva,
         total,
         notas,
-        items,
+        items: itemsPayload,
       })
       onSaved()
     } catch (err: unknown) {
@@ -243,11 +232,13 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
     }
   }
 
+  const newCount = items.filter((x) => x.isNew).length
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl flex flex-col max-h-[90vh]">
 
-        {/* Header */}
+        {/* Encabezado */}
         <div className="p-6 border-b border-gray-100">
           <h2 className="text-lg font-bold text-gray-900">Nueva factura de compra</h2>
           <p className="text-sm text-gray-500 mt-1">Proveedor: <strong>{proveedor.razon_social}</strong></p>
@@ -256,7 +247,7 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
         <div className="overflow-y-auto flex-1 p-6">
           <form id="factura-form" onSubmit={handleSubmit} className="space-y-5">
 
-            {/* ── Upload section ── */}
+            {/* ── Zona de carga ── */}
             <div className="rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 p-4 space-y-3">
               <div className="flex items-start gap-3">
                 <div className="flex-1">
@@ -264,7 +255,7 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
                     📷 Cargá una foto o PDF de la factura
                   </p>
                   <p className="text-xs text-blue-600 mt-0.5">
-                    La IA reconocerá los datos automáticamente (requiere <code className="bg-blue-100 px-1 rounded">ANTHROPIC_KEY</code>)
+                    La IA detecta los ítems y los agrega automáticamente a la tabla
                   </p>
                 </div>
                 <label className="cursor-pointer">
@@ -294,10 +285,19 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
                 </label>
               </div>
 
-              {fileName && !extracting && (
-                <p className="text-xs text-blue-700">
-                  ✓ <strong>{fileName}</strong>{sugeridos !== null ? ` — ${sugeridos.length} ítem(s) detectado(s)` : ''}
-                </p>
+              {/* Resumen IA */}
+              {iaResumen && !extracting && fileName && (
+                <div className="text-xs text-blue-800 bg-blue-100 rounded-lg px-3 py-2 space-y-0.5">
+                  <p>✓ <strong>{fileName}</strong></p>
+                  {iaResumen.existentes === 0 && iaResumen.nuevos === 0 ? (
+                    <p className="text-amber-700">La IA no detectó ítems nuevos (puede que ya estén todos agregados).</p>
+                  ) : (
+                    <p>
+                      {iaResumen.existentes > 0 && <span>{iaResumen.existentes} ítem{iaResumen.existentes > 1 ? 's' : ''} ya existente{iaResumen.existentes > 1 ? 's' : ''} en stock · </span>}
+                      {iaResumen.nuevos > 0 && <span className="text-blue-700 font-semibold">{iaResumen.nuevos} producto{iaResumen.nuevos > 1 ? 's' : ''} nuevo{iaResumen.nuevos > 1 ? 's' : ''} (se crearán automáticamente)</span>}
+                    </p>
+                  )}
+                </div>
               )}
 
               {extractError && (
@@ -305,22 +305,7 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
               )}
             </div>
 
-            {/* ── AI suggestions panel ── */}
-            {sugeridos && sugeridos.length > 0 && (
-              <SuggestionPanel
-                sugeridos={sugeridos}
-                productos={productos}
-                currentItems={items}
-                onAgregar={agregarItemDesdeIA}
-              />
-            )}
-            {sugeridos && sugeridos.length === 0 && (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                La IA no detectó ítems en el comprobante. Agregá los productos manualmente abajo.
-              </p>
-            )}
-
-            {/* ── Header fields ── */}
+            {/* ── Campos de cabecera ── */}
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="label">Número *</label>
@@ -357,7 +342,7 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
               </div>
             </div>
 
-            {/* ── Manual product selector ── */}
+            {/* ── Selector manual de producto ── */}
             <div>
               <label className="label">Agregar producto manualmente</label>
               <select
@@ -373,54 +358,76 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
               </select>
             </div>
 
-            {/* ── Items table ── */}
+            {/* ── Tabla de ítems ── */}
             {items.length > 0 && (
-              <div className="overflow-x-auto rounded-lg border border-gray-100">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="table-th">Producto</th>
-                      <th className="table-th text-right">Cantidad</th>
-                      <th className="table-th text-right">Costo unit.</th>
-                      <th className="table-th text-right">Subtotal</th>
-                      <th className="table-th"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {items.map((item, idx) => (
-                      <tr key={item.producto_id}>
-                        <td className="table-td font-medium">
-                          {item.nombre}
-                          <span className="ml-1 text-xs text-gray-400">{UNIDADES[item.unidad_medida] ?? item.unidad_medida}</span>
-                        </td>
-                        <td className="table-td text-right">
-                          <input
-                            type="number" step="0.001" min="0.001"
-                            value={item.cantidad}
-                            onChange={(e) => updateItem(idx, 'cantidad', parseFloat(e.target.value) || 0)}
-                            className="input w-24 text-right"
-                          />
-                        </td>
-                        <td className="table-td text-right">
-                          <input
-                            type="number" step="0.01" min="0"
-                            value={item.costo_unitario}
-                            onChange={(e) => updateItem(idx, 'costo_unitario', parseFloat(e.target.value) || 0)}
-                            className="input w-28 text-right"
-                          />
-                        </td>
-                        <td className="table-td text-right font-medium">{formatCurrency(item.subtotal)}</td>
-                        <td className="table-td">
-                          <button type="button" onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-700 text-xs">✕</button>
-                        </td>
+              <>
+                {newCount > 0 && (
+                  <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                    🆕 Los ítems marcados con el badge azul <strong>no existen</strong> en la base de datos. Se crearán automáticamente como productos nuevos al registrar la factura. Podés editar el nombre si el OCR lo leyó mal.
+                  </p>
+                )}
+                <div className="overflow-x-auto rounded-lg border border-gray-100">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="table-th">Producto</th>
+                        <th className="table-th text-right">Cantidad</th>
+                        <th className="table-th text-right">Costo unit.</th>
+                        <th className="table-th text-right">Subtotal</th>
+                        <th className="table-th"></th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {items.map((item, idx) => (
+                        <tr key={idx} className={item.isNew ? 'bg-blue-50/40' : ''}>
+                          <td className="table-td font-medium">
+                            {item.isNew ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold bg-blue-100 text-blue-700">🆕 Nuevo</span>
+                                <input
+                                  type="text"
+                                  value={item.nombre}
+                                  onChange={(e) => updateItemNombre(idx, e.target.value)}
+                                  className="input text-sm font-medium min-w-0 flex-1"
+                                  placeholder="Nombre del producto"
+                                />
+                              </div>
+                            ) : (
+                              <>
+                                {item.nombre}
+                                <span className="ml-1 text-xs text-gray-400">{UNIDADES[item.unidad_medida] ?? item.unidad_medida}</span>
+                              </>
+                            )}
+                          </td>
+                          <td className="table-td text-right">
+                            <input
+                              type="number" step="0.001" min="0.001"
+                              value={item.cantidad}
+                              onChange={(e) => updateItem(idx, 'cantidad', parseFloat(e.target.value) || 0)}
+                              className="input w-24 text-right"
+                            />
+                          </td>
+                          <td className="table-td text-right">
+                            <input
+                              type="number" step="0.01" min="0"
+                              value={item.costo_unitario}
+                              onChange={(e) => updateItem(idx, 'costo_unitario', parseFloat(e.target.value) || 0)}
+                              className="input w-28 text-right"
+                            />
+                          </td>
+                          <td className="table-td text-right font-medium">{formatCurrency(item.subtotal)}</td>
+                          <td className="table-td">
+                            <button type="button" onClick={() => removeItem(idx)} className="text-red-500 hover:text-red-700 text-xs">✕</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
 
-            {/* ── Totals ── */}
+            {/* ── Totales ── */}
             <div className="flex justify-end">
               <div className="w-56 space-y-2 text-sm">
                 <div className="flex justify-between text-gray-600">
@@ -459,11 +466,15 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
           </form>
         </div>
 
-        {/* Footer */}
+        {/* Pie */}
         <div className="border-t border-gray-100 p-4 flex justify-end gap-3">
           <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
           <button type="submit" form="factura-form" disabled={loading} className="btn-primary">
-            {loading ? 'Registrando...' : 'Registrar factura'}
+            {loading
+              ? 'Registrando…'
+              : newCount > 0
+                ? `Registrar factura (crear ${newCount} producto${newCount > 1 ? 's' : ''})`
+                : 'Registrar factura'}
           </button>
         </div>
       </div>

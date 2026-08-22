@@ -55,6 +55,97 @@ const facturaSchema = z.object({
   items: z.array(facturaItemSchema).min(1, 'La factura debe tener al menos un ítem'),
 })
 
+// ── Nueva variante que crea productos faltantes automáticamente ──────────────
+const facturaItemFlexSchema = z
+  .object({
+    producto_id: z.string().uuid().optional(),
+    nombre_nuevo: z.string().min(1).optional(),
+    cantidad: z.coerce.number().positive(),
+    costo_unitario: z.coerce.number().min(0),
+    subtotal: z.coerce.number().min(0),
+  })
+  .refine((d) => !!d.producto_id || !!d.nombre_nuevo, {
+    message: 'Cada ítem debe tener un producto_id existente o un nombre_nuevo',
+  })
+
+const facturaConNuevosSchema = z.object({
+  proveedor_id: z.string().uuid(),
+  numero: z.string().min(1),
+  fecha: z.string(),
+  tipo_comprobante: z.string().default('FACTURA'),
+  subtotal: z.coerce.number().min(0),
+  iva: z.coerce.number().min(0).default(0),
+  total: z.coerce.number().positive(),
+  notas: z.string().optional(),
+  items: z.array(facturaItemFlexSchema).min(1, 'La factura debe tener al menos un ítem'),
+})
+
+export async function registrarFacturaCompraConNuevosProductos(payload: unknown) {
+  const data = facturaConNuevosSchema.parse(payload)
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('No autenticado')
+
+  // Paso 1 – Crear productos nuevos y resolver todos los IDs
+  const resolvedItems: Array<{
+    producto_id: string
+    cantidad: number
+    costo_unitario: number
+    subtotal: number
+  }> = []
+
+  for (const item of data.items) {
+    let productoId = item.producto_id
+    if (!productoId) {
+      const { data: newProd, error } = await supabase
+        .from('productos')
+        .insert({
+          nombre: item.nombre_nuevo!,
+          categoria: 'INSUMO',   // default para productos importados de factura
+          unidad_medida: 'UNIDAD',
+          costo_actual: item.costo_unitario,
+        })
+        .select('id')
+        .single()
+      if (error) throw new Error(`Error al crear producto "${item.nombre_nuevo}": ${error.message}`)
+      productoId = newProd.id
+    }
+    resolvedItems.push({ producto_id: productoId, cantidad: item.cantidad, costo_unitario: item.costo_unitario, subtotal: item.subtotal })
+  }
+
+  // Paso 2 – Insertar factura
+  const { data: factura, error: facturaError } = await supabase
+    .from('facturas_compra')
+    .insert({
+      proveedor_id: data.proveedor_id,
+      numero: data.numero,
+      fecha: data.fecha,
+      tipo_comprobante: data.tipo_comprobante,
+      subtotal: data.subtotal,
+      iva: data.iva,
+      total: data.total,
+      saldo_pendiente: data.total,
+      notas: data.notas,
+      created_by: user.id,
+    })
+    .select()
+    .single()
+
+  if (facturaError) throw new Error(facturaError.message)
+
+  // Paso 3 – Insertar ítems (los triggers actualizan stock y costos automáticamente)
+  const { error: itemsError } = await supabase
+    .from('factura_compra_items')
+    .insert(resolvedItems.map((i) => ({ factura_compra_id: factura.id, ...i })))
+  if (itemsError) throw new Error(itemsError.message)
+
+  revalidatePath('/proveedores')
+  revalidatePath('/stock')
+  revalidatePath('/precios')
+  return factura
+}
+
+// ── Variante original (solo productos existentes) ─────────────────────────────
 export async function registrarFacturaCompra(payload: unknown) {
   const data = facturaSchema.parse(payload)
   const supabase = await createServerClient()
