@@ -1,52 +1,62 @@
 'use server'
 
-import { z } from 'zod'
-import { createServerClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { z } from 'zod'
+import { conUsuario } from '@/lib/supabase/server'
+import { ejecutar, type Resultado } from '@/lib/resultado'
+import { fechaISO, parsear, textoOpcional } from '@/lib/validacion'
+import type { Remito } from '@/lib/supabase/types'
 
-const RemitoSchema = z.object({
-  cliente_id:       z.string().uuid(),
+const remitoSchema = z.object({
+  cliente_id:       z.string().uuid('Seleccioná un cliente'),
   factura_venta_id: z.string().uuid().nullable().optional(),
-  numero:           z.string().min(1, 'El número es requerido'),
-  fecha:            z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida'),
-  notas:            z.string().optional(),
+  numero:           textoOpcional,
+  fecha:            fechaISO,
+  notas:            textoOpcional,
 })
 
-export async function crearRemito(payload: unknown) {
-  const parsed = RemitoSchema.safeParse(payload)
-  if (!parsed.success) throw new Error(parsed.error.errors[0].message)
+export async function crearRemito(payload: unknown): Promise<Resultado<Remito>> {
+  return ejecutar(async () => {
+    const data = parsear(remitoSchema, payload)
+    const { supabase } = await conUsuario()
 
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('No autenticado')
+    const { data: remito, error } = await supabase.rpc('crear_remito', {
+      p_cliente_id:       data.cliente_id,
+      p_fecha:            data.fecha,
+      p_factura_venta_id: data.factura_venta_id ?? undefined,
+      p_notas:            data.notas ?? undefined,
+      // Omitido ⇒ la base asigna el siguiente número correlativo.
+      p_numero:           data.numero ?? undefined,
+    })
+    if (error) throw error
 
-  const { error } = await supabase.from('remitos').insert({
-    cliente_id:       parsed.data.cliente_id,
-    factura_venta_id: parsed.data.factura_venta_id ?? null,
-    numero:           parsed.data.numero,
-    fecha:            parsed.data.fecha,
-    notas:            parsed.data.notas ?? null,
-    estado:           'PENDIENTE',
-    created_by:       user.id,
+    revalidatePath('/remitos')
+    return remito
   })
-
-  if (error) throw new Error(error.message)
-  revalidatePath('/remitos')
 }
 
-export async function eliminarRemito(id: string) {
-  const supabase = await createServerClient()
-  const { error } = await supabase.from('remitos').delete().eq('id', id)
-  if (error) throw new Error(error.message)
-  revalidatePath('/remitos')
+export async function eliminarRemito(id: string): Promise<Resultado> {
+  return ejecutar(async () => {
+    const { supabase } = await conUsuario()
+
+    const { error } = await supabase.from('remitos').delete().eq('id', id)
+    if (error) throw error
+
+    revalidatePath('/remitos')
+  })
 }
 
-export async function actualizarEstadoRemito(id: string, estado: string) {
-  const supabase = await createServerClient()
-  const { error } = await supabase
-    .from('remitos')
-    .update({ estado })
-    .eq('id', id)
-  if (error) throw new Error(error.message)
-  revalidatePath('/remitos')
+export async function actualizarEstadoRemito(id: string, estado: string): Promise<Resultado> {
+  return ejecutar(async () => {
+    const nuevoEstado = parsear(z.enum(['PENDIENTE', 'ENTREGADO', 'CANCELADO']), estado)
+    const { supabase } = await conUsuario()
+
+    const { error } = await supabase
+      .from('remitos')
+      .update({ estado: nuevoEstado })
+      .eq('id', id)
+    if (error) throw error
+
+    revalidatePath('/remitos')
+  })
 }

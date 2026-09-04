@@ -5,6 +5,9 @@ import type { Arquitecto, Cliente, Producto, Presupuesto } from '@/lib/supabase/
 import PresupuestoModal from './PresupuestoModal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { actualizarEstadoPresupuesto, convertirPresupuestoEnFactura, eliminarPresupuesto } from '@/lib/actions/presupuestos'
+import { useRouter } from 'next/navigation'
+import { avisoListadoParcial, type NoNulo } from '@/lib/paginacion'
+import type { ResumenPresupuestos } from '@/lib/supabase/types'
 
 type PresupuestoConRelaciones = Presupuesto & {
   arquitectos: { nombre: string; apellido: string | null; estudio: string | null } | null
@@ -17,6 +20,8 @@ type ProductoSlim   = Pick<Producto,   'id' | 'nombre' | 'unidad_medida' | 'prec
 
 type Props = {
   presupuestos: PresupuestoConRelaciones[]
+  totalFilas:   number | null
+  resumen:      NoNulo<ResumenPresupuestos>
   arquitectos:  ArquitectoSlim[]
   clientes:     ClienteSlim[]
   productos:    ProductoSlim[]
@@ -64,8 +69,11 @@ function clienteLabel(c: { nombre: string; apellido: string | null; razon_social
   return [c.nombre, c.apellido].filter(Boolean).join(' ')
 }
 
-export default function PresupuestosClient({ presupuestos: initial, arquitectos, clientes, productos }: Props) {
-  const [presupuestos, setPresupuestos] = useState(initial)
+export default function PresupuestosClient({ presupuestos: initial, totalFilas, resumen, arquitectos, clientes, productos }: Props) {
+  const aviso = avisoListadoParcial(initial.length, totalFilas)
+  const router = useRouter()
+  const [accionError, setAccionError] = useState<string | null>(null)
+  const presupuestos = initial
   const [filtro, setFiltro]             = useState<Filtro>('TODOS')
   const [busqueda, setBusqueda]         = useState('')
   const [showModal, setShowModal]       = useState(false)
@@ -88,23 +96,20 @@ export default function PresupuestosClient({ presupuestos: initial, arquitectos,
 
   const totalesPor: Record<Filtro, number> = {
     TODOS:      presupuestos.length,
-    BORRADOR:   presupuestos.filter((p) => p.estado === 'BORRADOR').length,
-    ENVIADO:    presupuestos.filter((p) => p.estado === 'ENVIADO').length,
-    APROBADO:   presupuestos.filter((p) => p.estado === 'APROBADO').length,
-    RECHAZADO:  presupuestos.filter((p) => p.estado === 'RECHAZADO').length,
-    CONVERTIDO: presupuestos.filter((p) => p.estado === 'CONVERTIDO').length,
+    BORRADOR:   resumen.borradores,
+    ENVIADO:    resumen.enviados,
+    APROBADO:   resumen.aprobados,
+    RECHAZADO:  resumen.rechazados,
+    CONVERTIDO: resumen.convertidos,
   }
 
   async function cambiarEstado(id: string, nuevoEstado: string) {
     setLoadingId(id)
-    try {
-      await actualizarEstadoPresupuesto(id, nuevoEstado)
-      setPresupuestos((prev) => prev.map((p) => p.id === id ? { ...p, estado: nuevoEstado } : p))
-    } catch {
-      alert('Error al actualizar estado')
-    } finally {
-      setLoadingId(null)
-    }
+    const r = await actualizarEstadoPresupuesto(id, nuevoEstado)
+    setLoadingId(null)
+    if (!r.ok) { setAccionError(r.error); return }
+    setAccionError(null)
+    router.refresh()
   }
 
   async function handleConvertir(e: React.FormEvent) {
@@ -112,34 +117,27 @@ export default function PresupuestosClient({ presupuestos: initial, arquitectos,
     if (!convertirId || !numeroFactura.trim()) return
     setLoadingId(convertirId)
     setConvertError(null)
-    try {
-      await convertirPresupuestoEnFactura(convertirId, numeroFactura.trim())
-      setPresupuestos((prev) => prev.map((p) => p.id === convertirId ? { ...p, estado: 'CONVERTIDO' } : p))
-      setConvertirId(null)
-      setNumeroFactura('')
-    } catch (err: unknown) {
-      setConvertError(err instanceof Error ? err.message : 'Error al convertir')
-    } finally {
-      setLoadingId(null)
-    }
+    const r = await convertirPresupuestoEnFactura(convertirId, numeroFactura.trim())
+    setLoadingId(null)
+    if (!r.ok) { setConvertError(r.error); return }
+    setConvertirId(null)
+    setNumeroFactura('')
+    router.refresh()
   }
 
   function onSaved() {
     setShowModal(false)
-    window.location.reload()
+    router.refresh()
   }
 
   async function handleDelete() {
     if (!deleteId) return
     setDeleting(true)
-    try {
-      await eliminarPresupuesto(deleteId)
-      setDeleteId(null)
-      window.location.reload()
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Error al eliminar')
-      setDeleting(false)
-    }
+    const r = await eliminarPresupuesto(deleteId)
+    setDeleting(false)
+    if (!r.ok) { setAccionError(r.error); return }
+    setDeleteId(null)
+    router.refresh()
   }
 
   const FILTROS: Filtro[] = ['TODOS', 'BORRADOR', 'ENVIADO', 'APROBADO', 'RECHAZADO', 'CONVERTIDO']
@@ -159,6 +157,17 @@ export default function PresupuestosClient({ presupuestos: initial, arquitectos,
             + Nuevo presupuesto
           </button>
         </div>
+        {aviso && (
+          <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {aviso}
+          </p>
+        )}
+        {accionError && (
+          <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+            {accionError}
+          </p>
+        )}
+
 
         {/* Filtros + búsqueda */}
         <div className="mb-4 flex flex-wrap items-center gap-3">

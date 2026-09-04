@@ -1,60 +1,71 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { createServerClient } from '@/lib/supabase/server'
+import { conUsuario } from '@/lib/supabase/server'
+import { ejecutar, type Resultado } from '@/lib/resultado'
+import { fechaISO, montoPositivo, parsear, textoOpcional, textoRequerido } from '@/lib/validacion'
+import type { Pago } from '@/lib/supabase/types'
 
-// ── Schema ─────────────────────────────────────────────────────────────────────
-const ImputacionSchema = z.object({
+const imputacionSchema = z.object({
   factura_venta_id:  z.string().uuid().optional(),
   factura_compra_id: z.string().uuid().optional(),
-  monto_imputado:    z.number().positive(),
+  monto_imputado:    montoPositivo,
 })
 
-const PagoSchema = z.object({
-  tipo:         z.enum(['COBRO_CLIENTE', 'PAGO_PROVEEDOR']),
-  cliente_id:   z.string().uuid().optional(),
-  proveedor_id: z.string().uuid().optional(),
-  monto:        z.number().positive(),
-  medio_pago:   z.string().min(1),
-  fecha:        z.string(),
-  notas:        z.string().nullable().optional(),
-  imputaciones: z.array(ImputacionSchema).default([]),
-})
+const pagoSchema = z
+  .object({
+    tipo:         z.enum(['COBRO_CLIENTE', 'PAGO_PROVEEDOR']),
+    cliente_id:   z.string().uuid().optional(),
+    proveedor_id: z.string().uuid().optional(),
+    monto:        montoPositivo,
+    medio_pago:   textoRequerido('Elegí un medio de pago'),
+    fecha:        fechaISO,
+    notas:        textoOpcional,
+    imputaciones: z.array(imputacionSchema).default([]),
+  })
+  .refine((d) => d.tipo !== 'COBRO_CLIENTE' || !!d.cliente_id, {
+    message: 'Seleccioná un cliente.',
+    path: ['cliente_id'],
+  })
+  .refine((d) => d.tipo !== 'PAGO_PROVEEDOR' || !!d.proveedor_id, {
+    message: 'Seleccioná un proveedor.',
+    path: ['proveedor_id'],
+  })
+  .refine(
+    (d) => d.imputaciones.reduce((s, i) => s + i.monto_imputado, 0) <= d.monto + 0.001,
+    { message: 'El total imputado supera el monto del pago.', path: ['imputaciones'] },
+  )
 
-// ── registrarPago ──────────────────────────────────────────────────────────────
-// 1. Inserta pagos  → trigger fn_caja_por_pago crea movimiento de caja automático
-// 2. Inserta pago_facturas → triggers actualizan saldo_pendiente y estado
-export async function registrarPago(payload: unknown) {
-  const parsed = PagoSchema.safeParse(payload)
-  if (!parsed.success) throw new Error(parsed.error.errors[0].message)
-  const { imputaciones, ...header } = parsed.data
+/**
+ * Registra el pago y sus imputaciones en una sola transacción.
+ *
+ * La RPC bloquea cada factura mientras valida su saldo, de modo que dos pagos
+ * concurrentes no puedan sobre-imputar la misma factura. Los triggers de la
+ * base generan el movimiento de caja y recalculan saldo y estado.
+ */
+export async function registrarPago(payload: unknown): Promise<Resultado<Pago>> {
+  return ejecutar(async () => {
+    const data = parsear(pagoSchema, payload)
+    const { supabase } = await conUsuario()
 
-  if (header.tipo === 'COBRO_CLIENTE'  && !header.cliente_id)   throw new Error('Seleccioná un cliente.')
-  if (header.tipo === 'PAGO_PROVEEDOR' && !header.proveedor_id) throw new Error('Seleccioná un proveedor.')
+    const { data: pago, error } = await supabase.rpc('registrar_pago', {
+      p_tipo:         data.tipo,
+      p_monto:        data.monto,
+      p_medio_pago:   data.medio_pago,
+      p_fecha:        data.fecha,
+      p_cliente_id:   data.cliente_id ?? undefined,
+      p_proveedor_id: data.proveedor_id ?? undefined,
+      p_notas:        data.notas ?? undefined,
+      p_imputaciones: data.imputaciones,
+    })
+    if (error) throw error
 
-  const totalImputado = imputaciones.reduce((s, i) => s + i.monto_imputado, 0)
-  if (totalImputado > header.monto + 0.001)
-    throw new Error('El total imputado supera el monto del pago.')
-
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('No autenticado')
-
-  // Insert pago (trigger fn_caja_por_pago fires here)
-  const { data: pago, error: pagoError } = await supabase
-    .from('pagos')
-    .insert({ ...header, created_by: user.id })
-    .select('id')
-    .single()
-  if (pagoError) throw new Error(pagoError.message)
-
-  // Imputar a facturas
-  if (imputaciones.length > 0) {
-    const rows = imputaciones.map((i) => ({ ...i, pago_id: pago.id }))
-    const { error: impError } = await supabase.from('pago_facturas').insert(rows)
-    if (impError) {
-      await supabase.from('pagos').delete().eq('id', pago.id)
-      throw new Error(impError.message)
-    }
-  }
+    revalidatePath('/pagos')
+    revalidatePath('/ventas')
+    revalidatePath('/compras')
+    revalidatePath('/caja')
+    revalidatePath('/')
+    return pago
+  })
 }

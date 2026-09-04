@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { registrarCierreCaja } from '@/lib/actions/caja'
+import { hoy } from '@/lib/fechas'
 
 type Props = {
   saldoSistema: number
@@ -14,7 +15,7 @@ function formatCurrency(n: number) {
 }
 
 export default function CierreModal({ saldoSistema, onSaved, onClose }: Props) {
-  const [fecha, setFecha]         = useState(new Date().toISOString().slice(0, 10))
+  const [fecha, setFecha]         = useState(hoy())
   const [saldoReal, setSaldoReal] = useState<number | ''>('')
   const [notas, setNotas]         = useState('')
   const [loading, setLoading]     = useState(false)
@@ -30,19 +31,15 @@ export default function CierreModal({ saldoSistema, onSaved, onClose }: Props) {
     if (typeof saldoReal !== 'number') { setError('Ingresá el saldo real.'); return }
 
     setLoading(true)
-    try {
-      await registrarCierreCaja({
-        fecha,
-        saldo_sistema: saldoSistema,
-        saldo_real:    saldoReal,
-        notas:         notas || null,
-      })
-      onSaved()
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error al registrar cierre')
-    } finally {
-      setLoading(false)
-    }
+    const r = await registrarCierreCaja({
+      fecha,
+      saldo_sistema: saldoSistema,
+      saldo_real:    saldoReal,
+      notas:         notas || null,
+    })
+    setLoading(false)
+    if (!r.ok) { setError(r.error); return }
+    onSaved()
   }
 
   return (

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { registrarAjusteCaja } from '@/lib/actions/caja'
+import { hoy } from '@/lib/fechas'
 
 type Tipo = 'INGRESO' | 'EGRESO' | 'AJUSTE'
 
@@ -17,7 +18,7 @@ export default function AjusteModal({ onSaved, onClose }: Props) {
   const [concepto, setConcepto] = useState('')
   const [monto, setMonto]       = useState<number | ''>('')
   const [medioPago, setMedioPago] = useState('Efectivo')
-  const [fecha, setFecha]       = useState(new Date().toISOString().slice(0, 10))
+  const [fecha, setFecha]       = useState(hoy())
   const [notas, setNotas]       = useState('')
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState<string | null>(null)
@@ -29,20 +30,16 @@ export default function AjusteModal({ onSaved, onClose }: Props) {
     if (!monto || monto <= 0) { setError('Ingresá el monto.'); return }
 
     setLoading(true)
-    try {
-      await registrarAjusteCaja({
-        tipo, concepto: concepto.trim(),
-        monto: typeof monto === 'number' ? monto : parseFloat(monto),
-        medio_pago: tipo === 'AJUSTE' ? null : medioPago,
-        fecha,
-        notas: notas || null,
-      })
-      onSaved()
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error al registrar')
-    } finally {
-      setLoading(false)
-    }
+    const r = await registrarAjusteCaja({
+      tipo, concepto: concepto.trim(),
+      monto: typeof monto === 'number' ? monto : parseFloat(monto),
+      medio_pago: tipo === 'AJUSTE' ? null : medioPago,
+      fecha,
+      notas: notas || null,
+    })
+    setLoading(false)
+    if (!r.ok) { setError(r.error); return }
+    onSaved()
   }
 
   return (

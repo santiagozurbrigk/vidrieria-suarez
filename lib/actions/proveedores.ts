@@ -1,260 +1,157 @@
 'use server'
 
-import { createServerClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { conUsuario } from '@/lib/supabase/server'
+import { ejecutar, type Resultado } from '@/lib/resultado'
+import { emailOpcional, enumOpcional, parsear, textoOpcional, textoRequerido } from '@/lib/validacion'
+import type { FacturaCompra, Proveedor } from '@/lib/supabase/types'
+
+const CONDICIONES_IVA = ['RESPONSABLE_INSCRIPTO', 'MONOTRIBUTISTA', 'EXENTO', 'CONSUMIDOR_FINAL'] as const
 
 const proveedorSchema = z.object({
-  razon_social: z.string().min(1, 'La razón social es obligatoria'),
-  cuit: z.string().optional(),
-  condicion_iva: z.enum(['RESPONSABLE_INSCRIPTO', 'MONOTRIBUTISTA', 'EXENTO', 'CONSUMIDOR_FINAL']).optional(),
-  contacto: z.string().optional(),
-  telefono: z.string().optional(),
-  email: z.string().email().optional().or(z.literal('')),
-  direccion: z.string().optional(),
-  alias_cbu: z.string().optional(),
-  notas: z.string().optional(),
+  razon_social:  textoRequerido('La razón social es obligatoria'),
+  cuit:          textoOpcional,
+  condicion_iva: enumOpcional(CONDICIONES_IVA),
+  contacto:      textoOpcional,
+  telefono:      textoOpcional,
+  email:         emailOpcional,
+  direccion:     textoOpcional,
+  alias_cbu:     textoOpcional,
+  cbu:           textoOpcional,
+  notas:         textoOpcional,
 })
 
-export async function crearProveedor(formData: FormData) {
-  const raw = Object.fromEntries(formData)
-  const data = proveedorSchema.parse(raw)
-  const supabase = await createServerClient()
-  const { data: proveedor, error } = await supabase.from('proveedores').insert(data).select().single()
-  if (error) throw new Error(error.message)
-  revalidatePath('/proveedores')
-  return proveedor
+export async function crearProveedor(formData: FormData): Promise<Resultado<Proveedor>> {
+  return ejecutar(async () => {
+    const data = parsear(proveedorSchema, Object.fromEntries(formData))
+    const { supabase } = await conUsuario()
+
+    const { data: proveedor, error } = await supabase
+      .from('proveedores')
+      .insert(data)
+      .select()
+      .single()
+    if (error) throw error
+
+    revalidatePath('/proveedores')
+    return proveedor
+  })
 }
 
-export async function actualizarProveedor(id: string, formData: FormData) {
-  const data = proveedorSchema.parse(Object.fromEntries(formData))
-  const supabase = await createServerClient()
-  const { data: proveedor, error } = await supabase.from('proveedores').update(data).eq('id', id).select().single()
-  if (error) throw new Error(error.message)
-  revalidatePath('/proveedores')
-  return proveedor
+export async function actualizarProveedor(id: string, formData: FormData): Promise<Resultado<Proveedor>> {
+  return ejecutar(async () => {
+    const data = parsear(proveedorSchema, Object.fromEntries(formData))
+    const { supabase } = await conUsuario()
+
+    const { data: proveedor, error } = await supabase
+      .from('proveedores')
+      .update(data)
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw error
+
+    revalidatePath('/proveedores')
+    return proveedor
+  })
 }
 
-// Registrar factura de compra con sus ítems (en una sola operación)
-const facturaItemSchema = z.object({
-  producto_id: z.string().uuid(),
-  cantidad: z.coerce.number().positive(),
-  costo_unitario: z.coerce.number().min(0),
-  subtotal: z.coerce.number().min(0),
-})
+// ── Facturas de compra ────────────────────────────────────────────────────────
+//
+// Un ítem trae `producto_id` (producto ya existente) o `nombre_nuevo` (producto
+// a crear). La RPC crea los productos faltantes y la factura en una sola
+// transacción: si la factura falla, los productos nuevos tampoco quedan.
 
-const facturaSchema = z.object({
-  proveedor_id: z.string().uuid(),
-  numero: z.string().min(1),
-  fecha: z.string(),
-  tipo_comprobante: z.string().default('FACTURA'),
-  subtotal: z.coerce.number().min(0),
-  iva: z.coerce.number().min(0).default(0),
-  total: z.coerce.number().positive(),
-  notas: z.string().optional(),
-  items: z.array(facturaItemSchema).min(1, 'La factura debe tener al menos un ítem'),
-})
-
-// ── Nueva variante que crea productos faltantes automáticamente ──────────────
-const facturaItemFlexSchema = z
+const itemSchema = z
   .object({
-    producto_id: z.string().uuid().optional(),
-    nombre_nuevo: z.string().min(1).optional(),
-    cantidad: z.coerce.number().positive(),
+    producto_id:    z.string().uuid().optional(),
+    nombre_nuevo:   z.string().trim().min(1).optional(),
+    categoria:      z.enum(['VIDRIO', 'ALUMINIO', 'ACCESORIO', 'INSUMO']).optional(),
+    unidad_medida:  z.enum(['UNIDAD', 'M2', 'ML']).optional(),
+    cantidad:       z.coerce.number().positive('La cantidad debe ser mayor a cero'),
     costo_unitario: z.coerce.number().min(0),
-    subtotal: z.coerce.number().min(0),
+    subtotal:       z.coerce.number().min(0),
   })
   .refine((d) => !!d.producto_id || !!d.nombre_nuevo, {
-    message: 'Cada ítem debe tener un producto_id existente o un nombre_nuevo',
+    message: 'Cada ítem debe tener un producto existente o un nombre nuevo',
   })
 
-const facturaConNuevosSchema = z.object({
-  proveedor_id: z.string().uuid(),
-  numero: z.string().min(1),
-  fecha: z.string(),
-  tipo_comprobante: z.string().default('FACTURA'),
-  subtotal: z.coerce.number().min(0),
-  iva: z.coerce.number().min(0).default(0),
-  total: z.coerce.number().positive(),
-  notas: z.string().optional(),
-  items: z.array(facturaItemFlexSchema).min(1, 'La factura debe tener al menos un ítem'),
+const facturaCompraSchema = z.object({
+  proveedor_id:     z.string().uuid('Seleccioná un proveedor'),
+  numero:           textoOpcional,
+  fecha:            z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha no es válida'),
+  tipo_comprobante: z.string().trim().default('FACTURA'),
+  subtotal:         z.coerce.number().min(0),
+  iva:              z.coerce.number().min(0).default(0),
+  total:            z.coerce.number().positive('El total debe ser mayor a cero'),
+  notas:            textoOpcional,
+  items:            z.array(itemSchema).min(1, 'La factura debe tener al menos un ítem'),
 })
 
-export async function registrarFacturaCompraConNuevosProductos(payload: unknown) {
-  const data = facturaConNuevosSchema.parse(payload)
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('No autenticado')
+export async function registrarFacturaCompra(payload: unknown): Promise<Resultado<FacturaCompra>> {
+  return ejecutar(async () => {
+    const data = parsear(facturaCompraSchema, payload)
+    const { supabase } = await conUsuario()
 
-  // Paso 1 – Crear productos nuevos y resolver todos los IDs
-  const resolvedItems: Array<{
-    producto_id: string
-    cantidad: number
-    costo_unitario: number
-    subtotal: number
-  }> = []
-
-  for (const item of data.items) {
-    let productoId = item.producto_id
-    if (!productoId) {
-      const { data: newProd, error } = await supabase
-        .from('productos')
-        .insert({
-          nombre: item.nombre_nuevo!,
-          categoria: 'INSUMO',   // default para productos importados de factura
-          unidad_medida: 'UNIDAD',
-          costo_actual: item.costo_unitario,
-        })
-        .select('id')
-        .single()
-      if (error) throw new Error(`Error al crear producto "${item.nombre_nuevo}": ${error.message}`)
-      productoId = newProd.id
-    }
-    resolvedItems.push({ producto_id: productoId, cantidad: item.cantidad, costo_unitario: item.costo_unitario, subtotal: item.subtotal })
-  }
-
-  // Paso 2 – Insertar factura
-  const { data: factura, error: facturaError } = await supabase
-    .from('facturas_compra')
-    .insert({
-      proveedor_id: data.proveedor_id,
-      numero: data.numero,
-      fecha: data.fecha,
-      tipo_comprobante: data.tipo_comprobante,
-      subtotal: data.subtotal,
-      iva: data.iva,
-      total: data.total,
-      saldo_pendiente: data.total,
-      notas: data.notas,
-      created_by: user.id,
+    const { data: factura, error } = await supabase.rpc('crear_factura_compra', {
+      p_proveedor_id:     data.proveedor_id,
+      p_fecha:            data.fecha,
+      p_subtotal:         data.subtotal,
+      p_total:            data.total,
+      p_items:            data.items,
+      p_tipo_comprobante: data.tipo_comprobante,
+      p_iva:              data.iva,
+      p_notas:            data.notas ?? undefined,
+      // Omitido ⇒ la base asigna el siguiente número correlativo.
+      p_numero:           data.numero ?? undefined,
     })
-    .select()
-    .single()
+    if (error) throw error
 
-  if (facturaError) throw new Error(facturaError.message)
-
-  // Paso 3 – Insertar ítems (los triggers actualizan stock y costos automáticamente)
-  const { error: itemsError } = await supabase
-    .from('factura_compra_items')
-    .insert(resolvedItems.map((i) => ({ factura_compra_id: factura.id, ...i })))
-  if (itemsError) throw new Error(itemsError.message)
-
-  revalidatePath('/proveedores')
-  revalidatePath('/stock')
-  revalidatePath('/precios')
-  return factura
+    revalidatePath('/proveedores')
+    revalidatePath('/compras')
+    revalidatePath('/stock')
+    revalidatePath('/precios')
+    return factura
+  })
 }
 
-// ── Variante original (solo productos existentes) ─────────────────────────────
-export async function registrarFacturaCompra(payload: unknown) {
-  const data = facturaSchema.parse(payload)
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('No autenticado')
+// ── Margen por proveedor ──────────────────────────────────────────────────────
 
-  // Insertar factura
-  const { data: factura, error: facturaError } = await supabase
-    .from('facturas_compra')
-    .insert({
-      proveedor_id: data.proveedor_id,
-      numero: data.numero,
-      fecha: data.fecha,
-      tipo_comprobante: data.tipo_comprobante,
-      subtotal: data.subtotal,
-      iva: data.iva,
-      total: data.total,
-      saldo_pendiente: data.total,
-      notas: data.notas,
-      created_by: user.id,
-    })
-    .select()
-    .single()
+export async function actualizarMargenProveedor(
+  proveedorId: string,
+  margen: number,
+): Promise<Resultado> {
+  return ejecutar(async () => {
+    const m = parsear(z.coerce.number().min(0).max(999, 'El margen no puede superar 999%'), margen)
+    const { supabase } = await conUsuario()
 
-  if (facturaError) throw new Error(facturaError.message)
+    const { error } = await supabase
+      .from('proveedores')
+      .update({ margen_ganancia: m })
+      .eq('id', proveedorId)
+    if (error) throw error
 
-  // Insertar ítems (los triggers se disparan automáticamente por cada ítem)
-  const items = data.items.map((item) => ({
-    factura_compra_id: factura.id,
-    producto_id: item.producto_id,
-    cantidad: item.cantidad,
-    costo_unitario: item.costo_unitario,
-    subtotal: item.subtotal,
-  }))
-
-  const { error: itemsError } = await supabase.from('factura_compra_items').insert(items)
-  if (itemsError) throw new Error(itemsError.message)
-
-  revalidatePath('/proveedores')
-  revalidatePath('/stock')
-  revalidatePath('/precios')
-  return factura
-}
-
-// ── Gestión de margen por proveedor ──────────────────────────────────────────
-export async function actualizarMargenProveedor(proveedorId: string, margen: number) {
-  const m = z.number().min(0).max(1000).parse(margen)
-  const supabase = await createServerClient()
-  const { error } = await supabase
-    .from('proveedores')
-    .update({ margen_ganancia: m })
-    .eq('id', proveedorId)
-  if (error) throw new Error(error.message)
-  revalidatePath('/precios')
+    revalidatePath('/precios')
+  })
 }
 
 /**
  * Re-aplica el margen actual del proveedor a todos los productos que alguna vez
- * se compraron a ese proveedor, recalculando precio_venta con el costo actual.
+ * se le compraron. Una sola sentencia en la base en vez de un UPDATE por
+ * producto; devuelve cuántos actualizó.
  */
-export async function recalcularPreciosProveedor(proveedorId: string) {
-  const supabase = await createServerClient()
+export async function recalcularPreciosProveedor(proveedorId: string): Promise<Resultado<number>> {
+  return ejecutar(async () => {
+    const { supabase } = await conUsuario()
 
-  // Obtener margen del proveedor
-  const { data: prov, error: provError } = await supabase
-    .from('proveedores')
-    .select('margen_ganancia')
-    .eq('id', proveedorId)
-    .single()
-  if (provError) throw new Error(provError.message)
+    const { data: afectados, error } = await supabase.rpc('recalcular_precios_proveedor', {
+      p_proveedor_id: proveedorId,
+    })
+    if (error) throw error
 
-  const margen = prov.margen_ganancia
-
-  // IDs de facturas de este proveedor
-  const { data: facturas, error: fErr } = await supabase
-    .from('facturas_compra')
-    .select('id')
-    .eq('proveedor_id', proveedorId)
-  if (fErr) throw new Error(fErr.message)
-
-  const facturaIds = facturas?.map((f) => f.id) ?? []
-  if (facturaIds.length === 0) return
-
-  // IDs únicos de productos comprados a este proveedor
-  const { data: items, error: iErr } = await supabase
-    .from('factura_compra_items')
-    .select('producto_id')
-    .in('factura_compra_id', facturaIds)
-  if (iErr) throw new Error(iErr.message)
-
-  const productoIds = [...new Set(items?.map((i) => i.producto_id) ?? [])]
-  if (productoIds.length === 0) return
-
-  // Leer costos actuales
-  const { data: productos, error: pErr } = await supabase
-    .from('productos')
-    .select('id, costo_actual')
-    .in('id', productoIds)
-  if (pErr) throw new Error(pErr.message)
-
-  // Actualizar precio_venta y margen_ganancia en batch
-  for (const prod of productos ?? []) {
-    const nuevoPrecio = Math.round(prod.costo_actual * (1 + margen / 100) * 100) / 100
-    await supabase
-      .from('productos')
-      .update({ margen_ganancia: margen, precio_venta: nuevoPrecio })
-      .eq('id', prod.id)
-  }
-
-  revalidatePath('/precios')
-  revalidatePath('/stock')
+    revalidatePath('/precios')
+    revalidatePath('/stock')
+    return afectados ?? 0
+  })
 }

@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import type { Cliente, Proveedor, FacturaVenta, FacturaCompra } from '@/lib/supabase/types'
 import { registrarPago } from '@/lib/actions/pagos'
+import { hoy } from '@/lib/fechas'
 
 type Tipo = 'COBRO_CLIENTE' | 'PAGO_PROVEEDOR'
 
@@ -11,13 +12,16 @@ type ProveedorSlim = Pick<Proveedor, 'id' | 'razon_social'>
 type FacturaVentaSlim  = Pick<FacturaVenta,  'id' | 'numero' | 'fecha' | 'total' | 'saldo_pendiente' | 'cliente_id'>
 type FacturaCompraSlim = Pick<FacturaCompra, 'id' | 'numero' | 'fecha' | 'total' | 'saldo_pendiente' | 'proveedor_id'>
 
-type Imputacion = {
-  factura_venta_id?:  string
-  factura_compra_id?: string
-  numero:       string
-  saldo:        number
+type FacturaPendiente = {
+  id:      string
+  numero:  string
+  saldo:   number
+  esVenta: boolean
+}
+
+type Imputacion = FacturaPendiente & {
   monto_imputado: number
-  checked:      boolean
+  checked:        boolean
 }
 
 type Props = {
@@ -45,66 +49,76 @@ export default function PagoModal({ tipo, clientes, proveedores, facturasVenta, 
   const [entidadId, setEntidadId]     = useState('')
   const [monto, setMonto]             = useState<number | ''>('')
   const [medioPago, setMedioPago]     = useState('Efectivo')
-  const [fecha, setFecha]             = useState(new Date().toISOString().slice(0, 10))
+  const [fecha, setFecha]             = useState(hoy())
   const [notas, setNotas]             = useState('')
-  const [imputaciones, setImputaciones] = useState<Imputacion[]>([])
+  // Sólo se guardan los ajustes que hace la persona sobre la distribución
+  // automática, indexados por id de factura. La lista de imputaciones en sí
+  // se deriva en el render: antes vivía en estado y se recalculaba desde dos
+  // useEffect que llamaban a setState en el cuerpo del efecto, lo que provoca
+  // renders en cascada (y es justo lo que marca react-hooks/set-state-in-effect).
+  const [desmarcadas, setDesmarcadas]           = useState<Record<string, boolean>>({})
+  const [montosManuales, setMontosManuales]     = useState<Record<string, number>>({})
   const [loading, setLoading]         = useState(false)
   const [error, setError]             = useState<string | null>(null)
 
-  const esCobro = tipo === 'COBRO_CLIENTE'
-  const titulo  = esCobro ? 'Nuevo cobro a cliente' : 'Nuevo pago a proveedor'
+  const esCobro  = tipo === 'COBRO_CLIENTE'
+  const titulo   = esCobro ? 'Nuevo cobro a cliente' : 'Nuevo pago a proveedor'
+  const montoNum = typeof monto === 'number' ? monto : 0
 
-  // Cuando cambia la entidad, cargar sus facturas pendientes
-  useEffect(() => {
-    if (!entidadId) { setImputaciones([]); return }
-    if (esCobro) {
-      const facturas = facturasVenta.filter((f) => f.cliente_id === entidadId && f.saldo_pendiente > 0)
-      setImputaciones(facturas.map((f) => ({
-        factura_venta_id: f.id,
-        numero:           f.numero,
-        saldo:            f.saldo_pendiente,
-        monto_imputado:   f.saldo_pendiente,
-        checked:          true,
-      })))
-    } else {
-      const facturas = facturasCompra.filter((f) => f.proveedor_id === entidadId && f.saldo_pendiente > 0)
-      setImputaciones(facturas.map((f) => ({
-        factura_compra_id: f.id,
-        numero:            f.numero,
-        saldo:             f.saldo_pendiente,
-        monto_imputado:    f.saldo_pendiente,
-        checked:           true,
-      })))
-    }
+  // Facturas con saldo de la entidad elegida.
+  const pendientes: FacturaPendiente[] = useMemo(() => {
+    if (!entidadId) return []
+    return esCobro
+      ? facturasVenta
+          .filter((f) => f.cliente_id === entidadId && f.saldo_pendiente > 0)
+          .map((f) => ({ id: f.id, numero: f.numero, saldo: f.saldo_pendiente, esVenta: true }))
+      : facturasCompra
+          .filter((f) => f.proveedor_id === entidadId && f.saldo_pendiente > 0)
+          .map((f) => ({ id: f.id, numero: f.numero, saldo: f.saldo_pendiente, esVenta: false }))
   }, [entidadId, esCobro, facturasVenta, facturasCompra])
 
-  // Al cambiar monto, recalcular distribución proporcional
-  useEffect(() => {
-    const montoNum = typeof monto === 'number' ? monto : 0
-    if (montoNum <= 0) return
+  // El monto se reparte de la más vieja a la más nueva, salvo donde la persona
+  // haya escrito un importe a mano.
+  const imputaciones: Imputacion[] = useMemo(() => {
+    const filas: Imputacion[] = []
     let restante = montoNum
-    setImputaciones((prev) => prev.map((imp) => {
-      if (!imp.checked) return { ...imp, monto_imputado: 0 }
-      const asignado = Math.min(imp.saldo, restante)
+
+    for (const f of pendientes) {
+      if (desmarcadas[f.id]) {
+        filas.push({ ...f, checked: false, monto_imputado: 0 })
+        continue
+      }
+      const manual = montosManuales[f.id]
+      const asignado = manual !== undefined
+        ? Math.min(manual, f.saldo)
+        : Math.min(f.saldo, restante)
       restante = Math.max(0, restante - asignado)
-      return { ...imp, monto_imputado: asignado }
-    }))
-  }, [monto])
+      filas.push({ ...f, checked: true, monto_imputado: asignado })
+    }
 
-  const totalImputado = imputaciones.filter((i) => i.checked).reduce((s, i) => s + i.monto_imputado, 0)
-  const montoNum = typeof monto === 'number' ? monto : 0
-  const excede   = totalImputado > montoNum + 0.01
+    return filas
+  }, [pendientes, montoNum, desmarcadas, montosManuales])
 
-  function toggleImputacion(idx: number) {
-    setImputaciones((prev) =>
-      prev.map((imp, i) => i !== idx ? imp : { ...imp, checked: !imp.checked, monto_imputado: !imp.checked ? imp.saldo : 0 })
-    )
+  const totalImputado = imputaciones.reduce((s, i) => s + i.monto_imputado, 0)
+  const totalPendiente = pendientes
+    .filter((f) => !desmarcadas[f.id])
+    .reduce((s, f) => s + f.saldo, 0)
+  const excede = totalImputado > montoNum + 0.01
+
+  function cambiarEntidad(id: string) {
+    setEntidadId(id)
+    // Los ajustes manuales son de la entidad anterior.
+    setDesmarcadas({})
+    setMontosManuales({})
   }
 
-  function updateMontoImputado(idx: number, val: number) {
-    setImputaciones((prev) =>
-      prev.map((imp, i) => i !== idx ? imp : { ...imp, monto_imputado: Math.min(val, imp.saldo) })
-    )
+  function toggleImputacion(id: string) {
+    setDesmarcadas((prev) => ({ ...prev, [id]: !prev[id] }))
+    setMontosManuales(({ [id]: _quitado, ...resto }) => resto)
+  }
+
+  function updateMontoImputado(id: string, val: number) {
+    setMontosManuales((prev) => ({ ...prev, [id]: Math.max(0, val) }))
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -115,26 +129,23 @@ export default function PagoModal({ tipo, clientes, proveedores, facturasVenta, 
     if (excede) { setError('El total imputado supera el monto del pago.'); return }
 
     setLoading(true)
-    try {
-      await registrarPago({
-        tipo,
-        ...(esCobro ? { cliente_id: entidadId } : { proveedor_id: entidadId }),
-        monto:       montoNum,
-        medio_pago:  medioPago,
-        fecha,
-        notas:       notas || null,
-        imputaciones: imputaciones
-          .filter((i) => i.checked && i.monto_imputado > 0)
-          .map(({ factura_venta_id, factura_compra_id, monto_imputado }) =>
-            ({ factura_venta_id, factura_compra_id, monto_imputado })
-          ),
-      })
-      onSaved()
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error al registrar pago')
-    } finally {
-      setLoading(false)
-    }
+    const r = await registrarPago({
+      tipo,
+      ...(esCobro ? { cliente_id: entidadId } : { proveedor_id: entidadId }),
+      monto:       montoNum,
+      medio_pago:  medioPago,
+      fecha,
+      notas:       notas || null,
+      imputaciones: imputaciones
+        .filter((i) => i.checked && i.monto_imputado > 0)
+        .map((i) => ({
+          ...(i.esVenta ? { factura_venta_id: i.id } : { factura_compra_id: i.id }),
+          monto_imputado: i.monto_imputado,
+        })),
+    })
+    setLoading(false)
+    if (!r.ok) { setError(r.error); return }
+    onSaved()
   }
 
   return (
@@ -154,7 +165,7 @@ export default function PagoModal({ tipo, clientes, proveedores, facturasVenta, 
               <label className="label">{esCobro ? 'Cliente *' : 'Proveedor *'}</label>
               <select
                 value={entidadId}
-                onChange={(e) => setEntidadId(e.target.value)}
+                onChange={(e) => cambiarEntidad(e.target.value)}
                 required
                 className="input"
               >
@@ -178,6 +189,15 @@ export default function PagoModal({ tipo, clientes, proveedores, facturasVenta, 
                   className="input"
                   placeholder="0"
                 />
+                {totalPendiente > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => { setMontosManuales({}); setMonto(totalPendiente) }}
+                    className="mt-1 text-xs text-blue-600 hover:underline"
+                  >
+                    Cancelar todo ({formatCurrency(totalPendiente)})
+                  </button>
+                )}
               </div>
               <div>
                 <label className="label">Medio de pago *</label>
@@ -212,13 +232,13 @@ export default function PagoModal({ tipo, clientes, proveedores, facturasVenta, 
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                      {imputaciones.map((imp, idx) => (
-                        <tr key={imp.factura_venta_id ?? imp.factura_compra_id} className={imp.checked ? '' : 'opacity-50'}>
+                      {imputaciones.map((imp) => (
+                        <tr key={imp.id} className={imp.checked ? '' : 'opacity-50'}>
                           <td className="table-td text-center">
                             <input
                               type="checkbox"
                               checked={imp.checked}
-                              onChange={() => toggleImputacion(idx)}
+                              onChange={() => toggleImputacion(imp.id)}
                               className="h-4 w-4 rounded border-gray-300"
                             />
                           </td>
@@ -228,7 +248,7 @@ export default function PagoModal({ tipo, clientes, proveedores, facturasVenta, 
                             <input
                               type="number" step="0.01" min="0"
                               value={imp.monto_imputado}
-                              onChange={(e) => updateMontoImputado(idx, parseFloat(e.target.value) || 0)}
+                              onChange={(e) => updateMontoImputado(imp.id, parseFloat(e.target.value) || 0)}
                               disabled={!imp.checked}
                               className="input w-28 text-right text-sm disabled:opacity-40"
                             />

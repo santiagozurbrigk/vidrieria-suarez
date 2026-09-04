@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { Producto, Proveedor } from '@/lib/supabase/types'
 import { actualizarMargenProveedor, recalcularPreciosProveedor } from '@/lib/actions/proveedores'
+import { useRouter } from 'next/navigation'
 
 type ProveedorSlim = Pick<Proveedor, 'id' | 'razon_social' | 'margen_ganancia'>
 type ProductoSlim = Pick<Producto, 'id' | 'nombre' | 'categoria' | 'unidad_medida' | 'costo_actual' | 'margen_ganancia' | 'precio_venta'>
@@ -15,6 +16,7 @@ function formatCurrency(n: number) {
 
 // ── Fila de proveedor ────────────────────────────────────────────────────────
 function ProveedorRow({ prov }: { prov: ProveedorSlim }) {
+  const router = useRouter()
   const [margen, setMargen] = useState(prov.margen_ganancia)
   const [editando, setEditando] = useState(false)
   const [draft, setDraft] = useState(prov.margen_ganancia)
@@ -26,30 +28,22 @@ function ProveedorRow({ prov }: { prov: ProveedorSlim }) {
   async function guardar() {
     setSaving(true)
     setError(null)
-    try {
-      await actualizarMargenProveedor(prov.id, draft)
-      setMargen(draft)
-      setEditando(false)
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Error')
-    } finally {
-      setSaving(false)
-    }
+    const r = await actualizarMargenProveedor(prov.id, draft)
+    setSaving(false)
+    if (!r.ok) { setError(r.error); return }
+    setMargen(draft)
+    setEditando(false)
   }
 
   async function aplicar() {
     setApplying(true)
     setApplyMsg(null)
     setError(null)
-    try {
-      await recalcularPreciosProveedor(prov.id)
-      setApplyMsg('✓ Precios actualizados')
-      setTimeout(() => setApplyMsg(null), 3000)
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Error')
-    } finally {
-      setApplying(false)
-    }
+    const r = await recalcularPreciosProveedor(prov.id)
+    setApplying(false)
+    if (!r.ok) { setError(r.error); return }
+    setApplyMsg(`✓ ${r.data} producto${r.data === 1 ? '' : 's'} actualizado${r.data === 1 ? '' : 's'}`)
+    router.refresh()
   }
 
   return (
@@ -61,7 +55,7 @@ function ProveedorRow({ prov }: { prov: ProveedorSlim }) {
             type="number"
             step="0.5"
             min="0"
-            max="1000"
+            max="999"
             value={draft}
             onChange={(e) => setDraft(parseFloat(e.target.value) || 0)}
             className="input w-24 text-right"

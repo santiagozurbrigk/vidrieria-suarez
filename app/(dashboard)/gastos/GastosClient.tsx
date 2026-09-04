@@ -6,94 +6,73 @@ import GastoModal from './GastoModal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { eliminarGasto } from '@/lib/actions/gastos'
 import { exportarExcel } from '@/lib/exportar'
+import { nombreMes } from '@/lib/fechas'
+import { avisoListadoParcial } from '@/lib/paginacion'
+import { useRouter } from 'next/navigation'
 
 type GastoConCategoria = Gasto & { categorias_gasto: { nombre: string } | null }
 
 type Props = {
-  gastos:     GastoConCategoria[]
-  categorias: CategoriaGasto[]
+  gastos:       GastoConCategoria[]
+  totalFilas:   number | null
+  /** Período mostrado, 'YYYY-MM'. Lo resuelve el servidor desde ?mes=. */
+  mes:          string
+  meses:        string[]
+  totalMes:     number
+  porCategoria: { categoria_id: string | null; categoria: string; cantidad: number; total: number }[]
+  categorias:   CategoriaGasto[]
 }
 
 function formatCurrency(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 }
 
-function mesLabel(yyyy: number, mm: number) {
-  return new Date(yyyy, mm - 1, 1).toLocaleString('es-AR', { month: 'long', year: 'numeric' })
-}
+const mesLabel = nombreMes
 
-export default function GastosClient({ gastos: initial, categorias }: Props) {
-  const [gastos]        = useState(initial)
+export default function GastosClient({
+  gastos, totalFilas, mes, meses, totalMes, porCategoria, categorias,
+}: Props) {
+  const router = useRouter()
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [editGasto, setEditGasto] = useState<GastoConCategoria | null>(null)
   const [deleteGasto, setDeleteGasto] = useState<GastoConCategoria | null>(null)
   const [deleting, setDeleting]   = useState(false)
 
-  // Filtros
-  const hoy    = new Date()
-  const [anio, setAnio]     = useState(hoy.getFullYear())
-  const [mes,  setMes]      = useState(hoy.getMonth() + 1)
+  // El mes lo decide el servidor vía ?mes=; acá sólo se filtra dentro de él.
   const [catId, setCatId]   = useState<string>('TODAS')
   const [busqueda, setBusqueda] = useState('')
 
-  // Lista de meses disponibles
-  const mesesDisponibles = useMemo(() => {
-    const set = new Set<string>()
-    gastos.forEach((g) => {
-      const d = g.fecha.slice(0, 7)
-      set.add(d)
-    })
-    set.add(`${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`)
-    return Array.from(set).sort().reverse()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gastos])
+  const aviso = avisoListadoParcial(gastos.length, totalFilas)
 
-  // Gastos filtrados
+  function cambiarMes(nuevoMes: string) {
+    router.push(`/gastos?mes=${nuevoMes}`)
+  }
+
   const filtrados = useMemo(() => {
-    const mesStr = `${anio}-${String(mes).padStart(2, '0')}`
     return gastos.filter((g) => {
-      const matchMes    = g.fecha.startsWith(mesStr)
       const matchCat    = catId === 'TODAS' || g.categoria_id === catId
       const matchSearch = busqueda === '' ||
         g.concepto.toLowerCase().includes(busqueda.toLowerCase()) ||
         (g.categorias_gasto?.nombre ?? '').toLowerCase().includes(busqueda.toLowerCase())
-      return matchMes && matchCat && matchSearch
+      return matchCat && matchSearch
     })
-  }, [gastos, anio, mes, catId, busqueda])
-
-  // Totales por categoría del período filtrado
-  const mesStr = `${anio}-${String(mes).padStart(2, '0')}`
-  const gastosMes = gastos.filter((g) => g.fecha.startsWith(mesStr))
-  const totalMes = gastosMes.reduce((s, g) => s + g.monto, 0)
-
-  const porCategoria = useMemo(() => {
-    const map = new Map<string, { nombre: string; total: number }>()
-    gastosMes.forEach((g) => {
-      const nombre = g.categorias_gasto?.nombre ?? 'Sin categoría'
-      const prev   = map.get(g.categoria_id) ?? { nombre, total: 0 }
-      map.set(g.categoria_id, { nombre, total: prev.total + g.monto })
-    })
-    return Array.from(map.values()).sort((a, b) => b.total - a.total)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gastos, anio, mes])
+  }, [gastos, catId, busqueda])
 
   function onSaved() {
     setShowModal(false)
     setEditGasto(null)
-    window.location.reload()
+    router.refresh()
   }
 
   async function handleDelete() {
     if (!deleteGasto) return
     setDeleting(true)
-    try {
-      await eliminarGasto(deleteGasto.id)
-      setDeleteGasto(null)
-      window.location.reload()
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Error al eliminar')
-      setDeleting(false)
-    }
+    const r = await eliminarGasto(deleteGasto.id)
+    setDeleting(false)
+    if (!r.ok) { setDeleteError(r.error); return }
+    setDeleteGasto(null)
+    router.refresh()
   }
 
   return (
@@ -111,6 +90,17 @@ export default function GastosClient({ gastos: initial, categorias }: Props) {
             + Nuevo gasto
           </button>
         </div>
+        {aviso && (
+          <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {aviso}
+          </p>
+        )}
+        {deleteError && (
+          <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+            {deleteError}
+          </p>
+        )}
+
 
         {/* Selector de período + resumen */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -118,14 +108,11 @@ export default function GastosClient({ gastos: initial, categorias }: Props) {
           <div className="card p-4 sm:w-56 shrink-0">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Período</p>
             <select
-              value={`${anio}-${String(mes).padStart(2, '0')}`}
-              onChange={(e) => {
-                const [y, m] = e.target.value.split('-')
-                setAnio(parseInt(y)); setMes(parseInt(m))
-              }}
+              value={mes}
+              onChange={(e) => cambiarMes(e.target.value)}
               className="input text-sm"
             >
-              {mesesDisponibles.map((ym) => {
+              {meses.map((ym) => {
                 const [y, m] = ym.split('-')
                 return <option key={ym} value={ym}>{mesLabel(parseInt(y), parseInt(m))}</option>
               })}
@@ -144,9 +131,9 @@ export default function GastosClient({ gastos: initial, categorias }: Props) {
                 {porCategoria.map((cat) => {
                   const pct = totalMes > 0 ? (cat.total / totalMes) * 100 : 0
                   return (
-                    <div key={cat.nombre}>
+                    <div key={cat.categoria}>
                       <div className="flex justify-between text-sm mb-0.5">
-                        <span className="text-gray-700 truncate">{cat.nombre}</span>
+                        <span className="text-gray-700 truncate">{cat.categoria}</span>
                         <span className="font-medium text-gray-900 ml-2 shrink-0">{formatCurrency(cat.total)}</span>
                       </div>
                       <div className="h-1.5 rounded-full bg-gray-100">
@@ -174,7 +161,7 @@ export default function GastosClient({ gastos: initial, categorias }: Props) {
                 'Medio de pago': g.medio_pago ?? '—',
                 'Monto':         g.monto,
               }))
-              exportarExcel(rows, 'Gastos', `gastos-${anio}-${String(mes).padStart(2, '0')}`)
+              exportarExcel(rows, 'Gastos', `gastos-${mes}`)
             }}
             className="btn-secondary text-sm"
           >

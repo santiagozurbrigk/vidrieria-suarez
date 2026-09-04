@@ -19,16 +19,12 @@ export default function ProductoModal({ producto, onSaved, onClose }: Props) {
     setError(null)
     setLoading(true)
     const fd = new FormData(e.currentTarget)
-    try {
-      const result = producto
-        ? await actualizarProducto(producto.id, fd)
-        : await crearProducto(fd)
-      if (result) onSaved(result)
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error desconocido')
-    } finally {
-      setLoading(false)
-    }
+    const r = producto
+      ? await actualizarProducto(producto.id, fd)
+      : await crearProducto(fd)
+    setLoading(false)
+    if (!r.ok) { setError(r.error); return }
+    onSaved(r.data)
   }
 
   return (

@@ -14,12 +14,10 @@ export default function ArquitectoModal({ arquitecto, onSaved, onClose }: Props)
     e.preventDefault()
     setError(null); setLoading(true)
     const fd = new FormData(e.currentTarget)
-    try {
-      const r = arquitecto ? await actualizarArquitecto(arquitecto.id, fd) : await crearArquitecto(fd)
-      if (r) onSaved(r)
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error')
-    } finally { setLoading(false) }
+    const r = arquitecto ? await actualizarArquitecto(arquitecto.id, fd) : await crearArquitecto(fd)
+    setLoading(false)
+    if (!r.ok) { setError(r.error); return }
+    onSaved(r.data)
   }
 
   return (

@@ -1,4 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server'
+import { LIMITE_LISTADO } from '@/lib/paginacion'
 import StockClient from './StockClient'
 
 export default async function StockPage() {
@@ -8,6 +9,7 @@ export default async function StockPage() {
     .from('productos')
     .select('*')
     .order('nombre')
+    .limit(LIMITE_LISTADO)
 
   const { data: { user } } = await supabase.auth.getUser()
   const { data: profile } = user

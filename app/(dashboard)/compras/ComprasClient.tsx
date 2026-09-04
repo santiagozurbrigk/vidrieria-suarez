@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import type { FacturaCompra } from '@/lib/supabase/types'
+import { avisoListadoParcial, type NoNulo } from '@/lib/paginacion'
+import type { ResumenCompras } from '@/lib/supabase/types'
 
 type FacturaConProveedor = FacturaCompra & {
   proveedores: { razon_social: string } | null
@@ -11,6 +13,8 @@ type ProveedorSlim = { id: string; razon_social: string }
 
 type Props = {
   facturas:    FacturaConProveedor[]
+  totalFilas:  number | null
+  resumen:     NoNulo<ResumenCompras>
   proveedores: ProveedorSlim[]
 }
 
@@ -31,7 +35,8 @@ function formatCurrency(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 }
 
-export default function ComprasClient({ facturas, proveedores }: Props) {
+export default function ComprasClient({ facturas, totalFilas, resumen, proveedores }: Props) {
+  const aviso = avisoListadoParcial(facturas.length, totalFilas)
   const [filtro, setFiltro]       = useState<Filtro>('TODAS')
   const [provId, setProvId]       = useState<string>('TODOS')
   const [busqueda, setBusqueda]   = useState('')
@@ -45,11 +50,12 @@ export default function ComprasClient({ facturas, proveedores }: Props) {
     return matchEstado && matchProveedor && matchBusqueda
   })
 
+  // Contadores y totales calculados en la base, no sobre el array cargado.
   const totalesPor: Record<Filtro, number> = {
     TODAS:     facturas.length,
-    PENDIENTE: facturas.filter((f) => f.estado === 'PENDIENTE').length,
-    PARCIAL:   facturas.filter((f) => f.estado === 'PARCIAL').length,
-    PAGADA:    facturas.filter((f) => f.estado === 'PAGADA').length,
+    PENDIENTE: resumen.pendientes,
+    PARCIAL:   resumen.parciales,
+    PAGADA:    resumen.pagadas,
   }
 
   // Totales del período filtrado
@@ -68,17 +74,23 @@ export default function ComprasClient({ facturas, proveedores }: Props) {
         </div>
       </div>
 
+      {aviso && (
+        <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {aviso}
+        </p>
+      )}
+
       {/* Tarjetas resumen */}
       <div className="mb-6 grid grid-cols-3 gap-4">
         <div className="card p-4">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total compras</p>
-          <p className="mt-1 text-2xl font-bold text-gray-900">{formatCurrency(facturas.reduce((s, f) => s + f.total, 0))}</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900">{formatCurrency(resumen.total_facturado)}</p>
           <p className="text-xs text-gray-400 mt-0.5">{facturas.length} facturas</p>
         </div>
         <div className="card p-4">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Por pagar</p>
-          <p className={`mt-1 text-2xl font-bold ${facturas.reduce((s, f) => s + f.saldo_pendiente, 0) > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-            {formatCurrency(facturas.reduce((s, f) => s + f.saldo_pendiente, 0))}
+          <p className={`mt-1 text-2xl font-bold ${resumen.total_pendiente > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+            {formatCurrency(resumen.total_pendiente)}
           </p>
           <p className="text-xs text-gray-400 mt-0.5">{totalesPor.PENDIENTE + totalesPor.PARCIAL} abiertas</p>
         </div>
