@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { Cliente, Producto, FacturaVenta, ResumenVentas } from '@/lib/supabase/types'
-import { avisoListadoParcial } from '@/lib/paginacion'
+import { avisoListadoParcial, type NoNulo } from '@/lib/paginacion'
 import FacturaVentaModal from './FacturaVentaModal'
 import CobroModal from './CobroModal'
 import { exportarExcel } from '@/lib/exportar'
@@ -28,7 +28,7 @@ type ProductoSlim = Pick<Producto, 'id' | 'nombre' | 'unidad_medida' | 'precio_v
 type Props = {
   facturas:   FacturaConCliente[]
   totalFilas: number | null
-  resumen:    ResumenVentas
+  resumen:    NoNulo<ResumenVentas>
   clientes:   ClienteSlim[]
   productos:  ProductoSlim[]
 }

@@ -1,5 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server'
-import { LIMITE_LISTADO } from '@/lib/paginacion'
+import { conCeros, LIMITE_LISTADO } from '@/lib/paginacion'
 import ComprasClient from './ComprasClient'
 
 export default async function ComprasPage() {
@@ -28,10 +28,7 @@ export default async function ComprasPage() {
     <ComprasClient
       facturas={facturas ?? []}
       totalFilas={count}
-      resumen={resumen ?? {
-        cantidad: 0, total_facturado: 0, total_pendiente: 0,
-        pendientes: 0, parciales: 0, pagadas: 0,
-      }}
+      resumen={conCeros(resumen, { cantidad: 0, total_facturado: 0, total_pendiente: 0, pendientes: 0, parciales: 0, pagadas: 0 })}
       proveedores={proveedores ?? []}
     />
   )

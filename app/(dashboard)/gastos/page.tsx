@@ -44,9 +44,20 @@ export default async function GastosPage({
   const totalMes = totalesMes?.find((m) => m.mes === mes)?.total ?? 0
 
   // El mes actual siempre aparece en el selector, tenga gastos o no.
-  const meses = Array.from(
-    new Set([...(totalesMes ?? []).map((m) => m.mes), mesActual(), mes]),
-  ).sort().reverse()
+  const mesesConGastos = (totalesMes ?? [])
+    .map((m) => m.mes)
+    .filter((m): m is string => m !== null)
+  const meses = Array.from(new Set([...mesesConGastos, mesActual(), mes]))
+    .sort()
+    .reverse()
+
+  // Las columnas calculadas de una vista llegan como nullable aunque nunca lo sean.
+  const categorias_del_mes = (porCategoria ?? []).map((c) => ({
+    ...c,
+    categoria: c.categoria ?? 'Sin categoría',
+    total:     c.total ?? 0,
+    cantidad:  c.cantidad ?? 0,
+  }))
 
   return (
     <GastosClient
@@ -55,7 +66,7 @@ export default async function GastosPage({
       mes={mes}
       meses={meses}
       totalMes={totalMes}
-      porCategoria={porCategoria ?? []}
+      porCategoria={categorias_del_mes}
       categorias={categorias ?? []}
     />
   )

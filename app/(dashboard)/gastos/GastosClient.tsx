@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import type { Gasto, CategoriaGasto, GastosPorCategoriaMes } from '@/lib/supabase/types'
+import type { Gasto, CategoriaGasto } from '@/lib/supabase/types'
 import GastoModal from './GastoModal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { eliminarGasto } from '@/lib/actions/gastos'
@@ -19,7 +19,7 @@ type Props = {
   mes:          string
   meses:        string[]
   totalMes:     number
-  porCategoria: GastosPorCategoriaMes[]
+  porCategoria: { categoria_id: string | null; categoria: string; cantidad: number; total: number }[]
   categorias:   CategoriaGasto[]
 }
 

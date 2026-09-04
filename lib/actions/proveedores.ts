@@ -97,14 +97,14 @@ export async function registrarFacturaCompra(payload: unknown): Promise<Resultad
     const { data: factura, error } = await supabase.rpc('crear_factura_compra', {
       p_proveedor_id:     data.proveedor_id,
       p_fecha:            data.fecha,
-      p_tipo_comprobante: data.tipo_comprobante,
       p_subtotal:         data.subtotal,
-      p_iva:              data.iva,
       p_total:            data.total,
-      p_notas:            data.notas,
       p_items:            data.items,
-      // null ⇒ la base asigna el siguiente número correlativo.
-      p_numero:           data.numero,
+      p_tipo_comprobante: data.tipo_comprobante,
+      p_iva:              data.iva,
+      p_notas:            data.notas ?? undefined,
+      // Omitido ⇒ la base asigna el siguiente número correlativo.
+      p_numero:           data.numero ?? undefined,
     })
     if (error) throw error
 
@@ -123,7 +123,7 @@ export async function actualizarMargenProveedor(
   margen: number,
 ): Promise<Resultado> {
   return ejecutar(async () => {
-    const m = parsear(z.coerce.number().min(0).max(1000, 'El margen no puede superar 1000%'), margen)
+    const m = parsear(z.coerce.number().min(0).max(999, 'El margen no puede superar 999%'), margen)
     const { supabase } = await conUsuario()
 
     const { error } = await supabase

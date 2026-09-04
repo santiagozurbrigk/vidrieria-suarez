@@ -6,7 +6,7 @@ import PresupuestoModal from './PresupuestoModal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { actualizarEstadoPresupuesto, convertirPresupuestoEnFactura, eliminarPresupuesto } from '@/lib/actions/presupuestos'
 import { useRouter } from 'next/navigation'
-import { avisoListadoParcial } from '@/lib/paginacion'
+import { avisoListadoParcial, type NoNulo } from '@/lib/paginacion'
 import type { ResumenPresupuestos } from '@/lib/supabase/types'
 
 type PresupuestoConRelaciones = Presupuesto & {
@@ -21,7 +21,7 @@ type ProductoSlim   = Pick<Producto,   'id' | 'nombre' | 'unidad_medida' | 'prec
 type Props = {
   presupuestos: PresupuestoConRelaciones[]
   totalFilas:   number | null
-  resumen:      ResumenPresupuestos
+  resumen:      NoNulo<ResumenPresupuestos>
   arquitectos:  ArquitectoSlim[]
   clientes:     ClienteSlim[]
   productos:    ProductoSlim[]

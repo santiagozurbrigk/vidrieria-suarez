@@ -74,25 +74,21 @@ proxy.ts                Refresco de sesión y redirección (ex middleware.ts)
 
 ## Base de datos
 
-El esquema es la fuente de verdad y vive versionado en `supabase/migrations/`.
-
-Para trabajar contra el proyecto real:
+El esquema es la fuente de verdad y vive versionado en
+[`supabase/migrations/`](./supabase/migrations/README.md), incluidas las
+funciones, los triggers y las políticas RLS.
 
 ```bash
-npx supabase link --project-ref <project-ref>
+npx supabase link --project-ref xavpyzyhphcjduycmyuy
+npx supabase db push        # aplicar migraciones pendientes
+npx supabase migration list # comparar local vs. remoto
 
-# Traer el esquema actual del proyecto como migración baseline
-npx supabase db pull
-
-# Aplicar migraciones pendientes
-npx supabase db push
-
-# Regenerar los tipos de TypeScript desde el esquema
-npx supabase gen types typescript --project-id <project-ref> > lib/supabase/types.ts
+# Regenerar los tipos después de cada cambio de esquema
+npx supabase gen types typescript --project-id xavpyzyhphcjduycmyuy > lib/supabase/types.ts
 ```
 
-> `lib/supabase/types.ts` debe regenerarse con el comando de arriba después de
-> cada cambio de esquema. No editarlo a mano.
+> `lib/supabase/types.ts` es un archivo **generado**. No editarlo a mano:
+> regenerarlo con el comando de arriba después de cada migración.
 
 ## Permisos
 

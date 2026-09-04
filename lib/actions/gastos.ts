@@ -62,9 +62,12 @@ export async function editarGasto(id: string, payload: unknown): Promise<Resulta
     const { error: errorCaja } = await supabase
       .from('movimientos_caja')
       .update({
-        concepto:   `Gasto: ${data.concepto}`,
+        // El trigger fn_caja_por_gasto copia el concepto tal cual, sin prefijo:
+        // agregarle uno acá dejaba la caja con un texto distinto al del gasto.
+        concepto:   data.concepto,
         monto:      data.monto,
         medio_pago: data.medio_pago,
+        fecha:      data.fecha,
       })
       .eq('gasto_id', id)
     if (errorCaja) throw errorCaja
@@ -77,13 +80,7 @@ export async function eliminarGasto(id: string): Promise<Resultado> {
   return ejecutar(async () => {
     const { supabase } = await conUsuario()
 
-    // Primero el movimiento de caja vinculado, por la foreign key.
-    const { error: errorCaja } = await supabase
-      .from('movimientos_caja')
-      .delete()
-      .eq('gasto_id', id)
-    if (errorCaja) throw errorCaja
-
+    // El movimiento de caja se va solo: la FK es ON DELETE CASCADE.
     const { error } = await supabase.from('gastos').delete().eq('id', id)
     if (error) throw error
 

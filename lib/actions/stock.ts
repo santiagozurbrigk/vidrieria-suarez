@@ -12,7 +12,7 @@ const productoSchema = z.object({
   descripcion:     textoOpcional,
   categoria:       z.enum(['VIDRIO', 'ALUMINIO', 'ACCESORIO', 'INSUMO']),
   unidad_medida:   z.enum(['UNIDAD', 'M2', 'ML']),
-  margen_ganancia: z.coerce.number().min(0).max(1000, 'El margen no puede superar 1000%'),
+  margen_ganancia: z.coerce.number().min(0).max(999, 'El margen no puede superar 999%'),
   stock_minimo:    z.coerce.number().min(0, 'El stock mínimo no puede ser negativo'),
 })
 
@@ -101,7 +101,7 @@ export async function actualizarMargen(
 ): Promise<Resultado<Producto>> {
   return ejecutar(async () => {
     const m = parsear(
-      z.coerce.number().min(0).max(1000, 'El margen no puede superar 1000%'),
+      z.coerce.number().min(0).max(999, 'El margen no puede superar 999%'),
       margen,
     )
     const { supabase } = await conUsuario()

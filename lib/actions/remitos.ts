@@ -23,10 +23,10 @@ export async function crearRemito(payload: unknown): Promise<Resultado<Remito>> 
     const { data: remito, error } = await supabase.rpc('crear_remito', {
       p_cliente_id:       data.cliente_id,
       p_fecha:            data.fecha,
-      p_factura_venta_id: data.factura_venta_id ?? null,
-      p_notas:            data.notas,
-      // null ⇒ la base asigna el siguiente número correlativo.
-      p_numero:           data.numero,
+      p_factura_venta_id: data.factura_venta_id ?? undefined,
+      p_notas:            data.notas ?? undefined,
+      // Omitido ⇒ la base asigna el siguiente número correlativo.
+      p_numero:           data.numero ?? undefined,
     })
     if (error) throw error
 

@@ -35,14 +35,14 @@ export async function crearPresupuesto(payload: unknown): Promise<Resultado<Pres
 
     const { data: presupuesto, error } = await supabase.rpc('crear_presupuesto', {
       p_arquitecto_id: data.arquitecto_id,
-      p_cliente_id:    data.cliente_id ?? null,
-      p_obra:          data.obra,
       p_fecha:         data.fecha,
-      p_validez_dias:  data.validez_dias,
-      p_notas:         data.notas,
       p_items:         data.items,
-      // null ⇒ la base asigna el siguiente número correlativo.
-      p_numero:        data.numero,
+      p_cliente_id:    data.cliente_id ?? undefined,
+      p_obra:          data.obra ?? undefined,
+      p_validez_dias:  data.validez_dias,
+      p_notas:         data.notas ?? undefined,
+      // Omitido ⇒ la base asigna el siguiente número correlativo.
+      p_numero:        data.numero ?? undefined,
     })
     if (error) throw error
 
@@ -111,7 +111,7 @@ export async function convertirPresupuestoEnFactura(
 
     const { data: factura, error } = await supabase.rpc('convertir_presupuesto_en_factura', {
       p_presupuesto_id: presupuestoId,
-      p_numero:         numero?.trim() || null,
+      p_numero:         numero?.trim() || undefined,
     })
     if (error) throw error
 

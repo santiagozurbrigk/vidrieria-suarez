@@ -1,5 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server'
-import { LIMITE_LISTADO } from '@/lib/paginacion'
+import { conCeros, LIMITE_LISTADO } from '@/lib/paginacion'
 import PresupuestosClient from './PresupuestosClient'
 
 export default async function PresupuestosPage() {
@@ -44,10 +44,10 @@ export default async function PresupuestosPage() {
     <PresupuestosClient
       presupuestos={presupuestos ?? []}
       totalFilas={count}
-      resumen={resumen ?? {
+      resumen={conCeros(resumen, {
         cantidad: 0, total: 0, borradores: 0, enviados: 0,
         aprobados: 0, rechazados: 0, convertidos: 0,
-      }}
+      })}
       arquitectos={arquitectos ?? []}
       clientes={clientes ?? []}
       productos={productos ?? []}

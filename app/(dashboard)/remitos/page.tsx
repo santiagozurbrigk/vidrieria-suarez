@@ -1,5 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server'
-import { LIMITE_LISTADO } from '@/lib/paginacion'
+import { conCeros, LIMITE_LISTADO } from '@/lib/paginacion'
 import RemitosClient from './RemitosClient'
 
 export default async function RemitosPage() {
@@ -34,7 +34,7 @@ export default async function RemitosPage() {
     <RemitosClient
       remitos={remitos ?? []}
       totalFilas={count}
-      resumen={resumen ?? { cantidad: 0, pendientes: 0, entregados: 0, cancelados: 0 }}
+      resumen={conCeros(resumen, { cantidad: 0, pendientes: 0, entregados: 0, cancelados: 0 })}
       clientes={clientes ?? []}
       facturasVenta={facturasVenta ?? []}
     />

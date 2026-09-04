@@ -55,7 +55,7 @@ function ProveedorRow({ prov }: { prov: ProveedorSlim }) {
             type="number"
             step="0.5"
             min="0"
-            max="1000"
+            max="999"
             value={draft}
             onChange={(e) => setDraft(parseFloat(e.target.value) || 0)}
             className="input w-24 text-right"

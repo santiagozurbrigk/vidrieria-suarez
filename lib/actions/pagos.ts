@@ -51,12 +51,12 @@ export async function registrarPago(payload: unknown): Promise<Resultado<Pago>> 
 
     const { data: pago, error } = await supabase.rpc('registrar_pago', {
       p_tipo:         data.tipo,
-      p_cliente_id:   data.cliente_id ?? null,
-      p_proveedor_id: data.proveedor_id ?? null,
       p_monto:        data.monto,
       p_medio_pago:   data.medio_pago,
       p_fecha:        data.fecha,
-      p_notas:        data.notas,
+      p_cliente_id:   data.cliente_id ?? undefined,
+      p_proveedor_id: data.proveedor_id ?? undefined,
+      p_notas:        data.notas ?? undefined,
       p_imputaciones: data.imputaciones,
     })
     if (error) throw error

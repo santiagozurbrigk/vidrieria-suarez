@@ -6,7 +6,7 @@ import RemitoModal from './RemitoModal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { actualizarEstadoRemito, eliminarRemito } from '@/lib/actions/remitos'
 import { useRouter } from 'next/navigation'
-import { avisoListadoParcial } from '@/lib/paginacion'
+import { avisoListadoParcial, type NoNulo } from '@/lib/paginacion'
 import type { ResumenRemitos } from '@/lib/supabase/types'
 
 type RemitoConRelaciones = Remito & {
@@ -20,7 +20,7 @@ type FacturaSlim = { id: string; numero: string; cliente_id: string; total: numb
 type Props = {
   remitos:       RemitoConRelaciones[]
   totalFilas:    number | null
-  resumen:       ResumenRemitos
+  resumen:       NoNulo<ResumenRemitos>
   clientes:      ClienteSlim[]
   facturasVenta: FacturaSlim[]
 }

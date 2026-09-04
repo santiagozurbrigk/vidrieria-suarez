@@ -41,14 +41,14 @@ export async function registrarFacturaVenta(payload: unknown): Promise<Resultado
     const { data: factura, error } = await supabase.rpc('crear_factura_venta', {
       p_cliente_id:       data.cliente_id,
       p_fecha:            data.fecha,
-      p_tipo_comprobante: data.tipo_comprobante,
       p_subtotal:         data.subtotal,
-      p_iva:              data.iva,
       p_total:            data.total,
-      p_notas:            data.notas,
       p_items:            data.items,
-      // null ⇒ la base asigna el siguiente número correlativo.
-      p_numero:           data.numero,
+      p_tipo_comprobante: data.tipo_comprobante,
+      p_iva:              data.iva,
+      p_notas:            data.notas ?? undefined,
+      // Omitido ⇒ la base asigna el siguiente número correlativo.
+      p_numero:           data.numero ?? undefined,
     })
     if (error) throw error
 
@@ -82,7 +82,7 @@ export async function registrarCobroVenta(payload: unknown): Promise<Resultado<P
       p_monto:      data.monto,
       p_medio_pago: data.medio_pago,
       p_fecha:      data.fecha,
-      p_notas:      data.notas,
+      p_notas:      data.notas ?? undefined,
     })
     if (error) throw error
 

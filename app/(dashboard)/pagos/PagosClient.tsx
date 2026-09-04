@@ -4,7 +4,7 @@ import { useState } from 'react'
 import type { Cliente, Proveedor, Pago, FacturaVenta, FacturaCompra } from '@/lib/supabase/types'
 import PagoModal from './PagoModal'
 import { useRouter } from 'next/navigation'
-import { avisoListadoParcial } from '@/lib/paginacion'
+import { avisoListadoParcial, type NoNulo } from '@/lib/paginacion'
 import type { ResumenPagos } from '@/lib/supabase/types'
 
 type Tipo = 'COBRO_CLIENTE' | 'PAGO_PROVEEDOR'
@@ -22,7 +22,7 @@ type FacturaCompraSlim = Pick<FacturaCompra, 'id' | 'numero' | 'fecha' | 'total'
 type Props = {
   pagos:          PagoConRelaciones[]
   totalFilas:     number | null
-  resumen:        ResumenPagos
+  resumen:        NoNulo<ResumenPagos>
   clientes:       ClienteSlim[]
   proveedores:    ProveedorSlim[]
   facturasVenta:  FacturaVentaSlim[]

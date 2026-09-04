@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { FacturaCompra } from '@/lib/supabase/types'
-import { avisoListadoParcial } from '@/lib/paginacion'
+import { avisoListadoParcial, type NoNulo } from '@/lib/paginacion'
 import type { ResumenCompras } from '@/lib/supabase/types'
 
 type FacturaConProveedor = FacturaCompra & {
@@ -14,7 +14,7 @@ type ProveedorSlim = { id: string; razon_social: string }
 type Props = {
   facturas:    FacturaConProveedor[]
   totalFilas:  number | null
-  resumen:     ResumenCompras
+  resumen:     NoNulo<ResumenCompras>
   proveedores: ProveedorSlim[]
 }
 
