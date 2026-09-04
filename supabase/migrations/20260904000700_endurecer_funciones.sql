@@ -71,6 +71,9 @@ grant execute on function public.siguiente_numero(text) to authenticated;
 -- ── Pendiente fuera de SQL ───────────────────────────────────────────────────
 --
 -- El linter también marca "Leaked Password Protection Disabled". Eso no se
--- arregla con una migración: es un interruptor del panel de Supabase, en
--- Authentication > Policies > Password protection. Conviene activarlo — valida
--- las contraseñas nuevas contra HaveIBeenPwned.
+-- arregla con una migración, y además requiere plan Pro: la organización está
+-- en Free, así que el interruptor ni siquiera aparece. Vive en
+-- Authentication > Sign In / Providers > Email.
+--
+-- Lo que sí se puede configurar en Free, en esa misma pantalla: longitud
+-- mínima de contraseña y caracteres requeridos.

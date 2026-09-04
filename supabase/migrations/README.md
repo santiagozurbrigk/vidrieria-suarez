@@ -95,9 +95,17 @@ de abajo — que era exactamente el caso de `v_saldo_caja` y
 cualquier usuario autenticado podía leer el saldo de caja completo aunque su rol
 no tuviera permiso sobre `movimientos_caja`. Corregido en `20260904000600`.
 
-## Pendiente, fuera de SQL
+## La advertencia que queda del linter
 
-El linter de Supabase marca **Leaked Password Protection Disabled**. Es un
-interruptor del panel (Authentication → Policies), no algo que se arregle con
-una migración. Conviene activarlo: valida las contraseñas nuevas contra
-HaveIBeenPwned.
+El linter de Supabase marca **Leaked Password Protection Disabled**. No se
+arregla con una migración y **no se puede activar en el plan actual**: la
+protección contra contraseñas filtradas requiere plan Pro y la organización
+está en Free.
+
+Lo que sí se puede configurar hoy, en Authentication → Sign In / Providers →
+Email, es la longitud mínima de contraseña (al menos 8) y los caracteres
+requeridos (dígitos, minúsculas, mayúsculas y símbolos). Para un sistema
+interno con pocos usuarios eso cubre la mayor parte del riesgo; la protección
+contra contraseñas filtradas apunta a ataques de credential stuffing masivo.
+
+Si en algún momento se pasa a Pro, el interruptor aparece en esa misma pantalla.
