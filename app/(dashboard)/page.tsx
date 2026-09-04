@@ -1,13 +1,9 @@
 import { createServerClient } from '@/lib/supabase/server'
 import Link from 'next/link'
+import { anioMesActual, mesActual, nombreMes, rangoMes } from '@/lib/fechas'
 
 function formatCurrency(n: number | null) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n ?? 0)
-}
-
-function mesActual() {
-  const hoy = new Date()
-  return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
 }
 
 const ESTADO_PRES_LABEL: Record<string, string> = {
@@ -22,6 +18,9 @@ const ESTADO_PRES_BADGE: Record<string, string> = {
 export default async function DashboardPage() {
   const supabase = await createServerClient()
   const mes = mesActual()
+  // Límite superior exclusivo: `${mes}-31` produce fechas inválidas
+  // (p. ej. '2026-02-31') que PostgreSQL rechaza, haciendo fallar la consulta.
+  const { desde: mesDesde, hasta: mesHasta } = rangoMes(mes)
 
   const [
     { data: saldoCajaRaw },
@@ -37,7 +36,7 @@ export default async function DashboardPage() {
     supabase.from('v_saldo_caja').select('saldo_actual, total_ingresos, total_egresos').single(),
     supabase.from('v_productos_bajo_minimo').select('id, nombre, stock_actual, stock_minimo'),
     // Ventas del mes
-    supabase.from('facturas_venta').select('total').gte('fecha', `${mes}-01`).lte('fecha', `${mes}-31`),
+    supabase.from('facturas_venta').select('total').gte('fecha', mesDesde).lt('fecha', mesHasta),
     // Facturas con saldo pendiente (para cobros abiertos)
     supabase
       .from('facturas_venta')
@@ -45,7 +44,7 @@ export default async function DashboardPage() {
       .in('estado', ['PENDIENTE', 'PARCIAL'])
       .order('fecha'),
     // Gastos del mes
-    supabase.from('gastos').select('monto').gte('fecha', `${mes}-01`).lte('fecha', `${mes}-31`),
+    supabase.from('gastos').select('monto').gte('fecha', mesDesde).lt('fecha', mesHasta),
     // Últimas 5 ventas
     supabase
       .from('facturas_venta')
@@ -87,8 +86,8 @@ export default async function DashboardPage() {
     return a.estudio ? `${nombre} (${a.estudio})` : nombre
   }
 
-  const hoy = new Date()
-  const mesNombre = hoy.toLocaleString('es-AR', { month: 'long', year: 'numeric' })
+  const { anio, mes: mesNum } = anioMesActual()
+  const mesNombre = nombreMes(anio, mesNum)
 
   return (
     <div className="space-y-6">

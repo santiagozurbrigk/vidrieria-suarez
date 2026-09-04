@@ -1,7 +1,48 @@
-// Generado manualmente desde el esquema. Regenerar con:
-// supabase gen types typescript --project-id xavpyzyhphcjduycmyuy > lib/supabase/types.ts
+// Regenerar después de cada cambio de esquema:
+//   npx supabase gen types typescript --project-id <project-ref> > lib/supabase/types.ts
+//
+// Hoy este archivo se mantiene a mano, así que puede desincronizarse de la base
+// real sin que nada lo detecte. Ver supabase/migrations/README.md.
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
+
+// Formas de fila reutilizadas por las funciones RPC (ver Functions más abajo).
+type FacturaVentaRow = {
+    id: string; cliente_id: string; numero: string; fecha: string
+    tipo_comprobante: string; subtotal: number; iva: number; total: number
+    saldo_pendiente: number; estado: 'PENDIENTE' | 'PARCIAL' | 'PAGADA'
+    archivo_adjunto_path: string | null; notas: string | null
+    created_by: string; created_at: string; updated_at: string
+  }
+
+type FacturaCompraRow = {
+    id: string; proveedor_id: string; numero: string; fecha: string
+    tipo_comprobante: string; subtotal: number; iva: number; total: number
+    saldo_pendiente: number; estado: 'PENDIENTE' | 'PARCIAL' | 'PAGADA'
+    archivo_adjunto_path: string | null; notas: string | null
+    created_by: string; created_at: string; updated_at: string
+  }
+
+type PresupuestoRow = {
+    id: string; arquitecto_id: string; cliente_id: string | null; obra: string | null
+    numero: string; fecha: string; validez_dias: number; total: number; estado: string
+    convertido_en_factura_id: string | null; notas: string | null
+    created_by: string; created_at: string; updated_at: string
+  }
+
+type PagoRow = {
+    id: string; tipo: 'COBRO_CLIENTE' | 'PAGO_PROVEEDOR'
+    cliente_id: string | null; proveedor_id: string | null
+    monto: number; medio_pago: string; fecha: string; notas: string | null
+    created_by: string; created_at: string
+  }
+
+type RemitoRow = {
+    id: string; cliente_id: string; factura_venta_id: string | null
+    numero: string; fecha: string; estado: string
+    archivo_adjunto_path: string | null; notas: string | null
+    created_by: string; created_at: string
+  }
 
 export type Database = {
   public: {
@@ -84,13 +125,7 @@ export type Database = {
         Relationships: []
       }
       facturas_compra: {
-        Row: {
-          id: string; proveedor_id: string; numero: string; fecha: string
-          tipo_comprobante: string; subtotal: number; iva: number; total: number
-          saldo_pendiente: number; estado: 'PENDIENTE' | 'PARCIAL' | 'PAGADA'
-          archivo_adjunto_path: string | null; notas: string | null
-          created_by: string; created_at: string; updated_at: string
-        }
+        Row: FacturaCompraRow
         Insert: {
           id?: string; proveedor_id: string; numero: string; fecha?: string
           tipo_comprobante?: string; subtotal?: number; iva?: number
@@ -162,13 +197,7 @@ export type Database = {
         Relationships: []
       }
       facturas_venta: {
-        Row: {
-          id: string; cliente_id: string; numero: string; fecha: string
-          tipo_comprobante: string; subtotal: number; iva: number; total: number
-          saldo_pendiente: number; estado: 'PENDIENTE' | 'PARCIAL' | 'PAGADA'
-          archivo_adjunto_path: string | null; notas: string | null
-          created_by: string; created_at: string; updated_at: string
-        }
+        Row: FacturaVentaRow
         Insert: {
           id?: string; cliente_id: string; numero: string; fecha?: string
           tipo_comprobante?: string; subtotal?: number; iva?: number
@@ -205,12 +234,7 @@ export type Database = {
         Relationships: []
       }
       presupuestos: {
-        Row: {
-          id: string; arquitecto_id: string; cliente_id: string | null; obra: string | null
-          numero: string; fecha: string; validez_dias: number; total: number; estado: string
-          convertido_en_factura_id: string | null; notas: string | null
-          created_by: string; created_at: string; updated_at: string
-        }
+        Row: PresupuestoRow
         Insert: {
           id?: string; arquitecto_id: string; cliente_id?: string | null; obra?: string | null
           numero: string; fecha?: string; validez_dias?: number; total?: number; estado?: string
@@ -289,19 +313,14 @@ export type Database = {
           medio_pago?: string | null; fecha?: string
           archivo_adjunto_path?: string | null; notas?: string | null; usuario_id: string
         }
-        Update: { categoria_id?: string; concepto?: string; monto?: number; medio_pago?: string | null; notas?: string | null }
+        Update: { categoria_id?: string; concepto?: string; monto?: number; medio_pago?: string | null; fecha?: string; notas?: string | null }
         Relationships: [
           { foreignKeyName: "gastos_categoria_id_fkey"; columns: ["categoria_id"]; isOneToOne: false; referencedRelation: "categorias_gasto"; referencedColumns: ["id"] },
           { foreignKeyName: "gastos_usuario_id_fkey"; columns: ["usuario_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
         ]
       }
       pagos: {
-        Row: {
-          id: string; tipo: 'COBRO_CLIENTE' | 'PAGO_PROVEEDOR'
-          cliente_id: string | null; proveedor_id: string | null
-          monto: number; medio_pago: string; fecha: string; notas: string | null
-          created_by: string; created_at: string
-        }
+        Row: PagoRow
         Insert: {
           id?: string; tipo: 'COBRO_CLIENTE' | 'PAGO_PROVEEDOR'
           cliente_id?: string | null; proveedor_id?: string | null
@@ -331,12 +350,7 @@ export type Database = {
         ]
       }
       remitos: {
-        Row: {
-          id: string; cliente_id: string; factura_venta_id: string | null
-          numero: string; fecha: string; estado: string
-          archivo_adjunto_path: string | null; notas: string | null
-          created_by: string; created_at: string
-        }
+        Row: RemitoRow
         Insert: {
           id?: string; cliente_id: string; factura_venta_id?: string | null
           numero: string; fecha?: string; estado?: string
@@ -378,11 +392,114 @@ export type Database = {
         Row: { saldo_actual: number | null; total_ingresos: number | null; total_egresos: number | null }
         Relationships: []
       }
+      // Totales calculados en la base — ver
+      // supabase/migrations/20260904000500_vistas_resumen.sql
+      v_resumen_ventas: {
+        Row: {
+          cantidad: number; total_facturado: number; total_pendiente: number
+          pendientes: number; parciales: number; pagadas: number
+        }
+        Relationships: []
+      }
+      v_resumen_compras: {
+        Row: {
+          cantidad: number; total_facturado: number; total_pendiente: number
+          pendientes: number; parciales: number; pagadas: number
+        }
+        Relationships: []
+      }
+      v_resumen_pagos: {
+        Row: { cantidad: number; total_cobros: number; total_pagos: number }
+        Relationships: []
+      }
+      v_resumen_presupuestos: {
+        Row: {
+          cantidad: number; total: number; borradores: number; enviados: number
+          aprobados: number; rechazados: number; convertidos: number
+        }
+        Relationships: []
+      }
+      v_resumen_remitos: {
+        Row: { cantidad: number; pendientes: number; entregados: number; cancelados: number }
+        Relationships: []
+      }
+      v_gastos_por_mes: {
+        Row: { mes: string; cantidad: number; total: number }
+        Relationships: []
+      }
+      v_gastos_por_categoria_mes: {
+        Row: { mes: string; categoria_id: string | null; categoria: string; cantidad: number; total: number }
+        Relationships: []
+      }
     }
     Functions: {
       is_admin: { Args: Record<string, never>; Returns: boolean }
       get_user_rol: { Args: Record<string, never>; Returns: 'ADMIN' | 'VENDEDOR' | 'DEPOSITO' }
       is_vendedor_or_above: { Args: Record<string, never>; Returns: boolean }
+
+      // ── RPCs transaccionales ────────────────────────────────────────────────
+      // Definidas en supabase/migrations/20260904000200_rpc_transaccionales.sql.
+      // Escriben cabecera + ítems en una sola transacción; si un trigger aborta,
+      // se revierte todo. Pasar p_numero como null asigna el correlativo.
+      siguiente_numero: {
+        Args: { p_tipo: string }
+        Returns: string
+      }
+      crear_factura_venta: {
+        Args: {
+          p_cliente_id: string; p_fecha: string; p_tipo_comprobante: string
+          p_subtotal: number; p_iva: number; p_total: number
+          p_notas: string | null; p_items: Json; p_numero?: string | null
+        }
+        Returns: FacturaVentaRow
+      }
+      crear_factura_compra: {
+        Args: {
+          p_proveedor_id: string; p_fecha: string; p_tipo_comprobante: string
+          p_subtotal: number; p_iva: number; p_total: number
+          p_notas: string | null; p_items: Json; p_numero?: string | null
+        }
+        Returns: FacturaCompraRow
+      }
+      crear_presupuesto: {
+        Args: {
+          p_arquitecto_id: string; p_cliente_id: string | null; p_obra: string | null
+          p_fecha: string; p_validez_dias: number; p_notas: string | null
+          p_items: Json; p_numero?: string | null
+        }
+        Returns: PresupuestoRow
+      }
+      convertir_presupuesto_en_factura: {
+        Args: { p_presupuesto_id: string; p_numero?: string | null }
+        Returns: FacturaVentaRow
+      }
+      registrar_pago: {
+        Args: {
+          p_tipo: 'COBRO_CLIENTE' | 'PAGO_PROVEEDOR'
+          p_cliente_id: string | null; p_proveedor_id: string | null
+          p_monto: number; p_medio_pago: string; p_fecha: string
+          p_notas: string | null; p_imputaciones?: Json
+        }
+        Returns: PagoRow
+      }
+      registrar_cobro_venta: {
+        Args: {
+          p_factura_id: string; p_monto: number
+          p_medio_pago: string; p_fecha: string; p_notas?: string | null
+        }
+        Returns: PagoRow
+      }
+      crear_remito: {
+        Args: {
+          p_cliente_id: string; p_fecha: string
+          p_factura_venta_id?: string | null; p_notas?: string | null; p_numero?: string | null
+        }
+        Returns: RemitoRow
+      }
+      recalcular_precios_proveedor: {
+        Args: { p_proveedor_id: string }
+        Returns: number
+      }
     }
     Enums: {
       rol_usuario: 'ADMIN' | 'VENDEDOR' | 'DEPOSITO'
@@ -423,3 +540,11 @@ export type Pago           = Tables<'pagos'>
 export type PagoFactura    = Tables<'pago_facturas'>
 export type CierreCaja     = Tables<'cierres_caja'>
 export type Remito         = Tables<'remitos'>
+
+export type ResumenVentas       = Database['public']['Views']['v_resumen_ventas']['Row']
+export type ResumenCompras      = Database['public']['Views']['v_resumen_compras']['Row']
+export type ResumenPagos        = Database['public']['Views']['v_resumen_pagos']['Row']
+export type ResumenPresupuestos = Database['public']['Views']['v_resumen_presupuestos']['Row']
+export type ResumenRemitos      = Database['public']['Views']['v_resumen_remitos']['Row']
+export type GastosPorMes          = Database['public']['Views']['v_gastos_por_mes']['Row']
+export type GastosPorCategoriaMes = Database['public']['Views']['v_gastos_por_categoria_mes']['Row']

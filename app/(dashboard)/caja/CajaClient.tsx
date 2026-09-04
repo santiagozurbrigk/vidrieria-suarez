@@ -4,6 +4,8 @@ import { useState } from 'react'
 import type { MovimientoCaja, CierreCaja } from '@/lib/supabase/types'
 import AjusteModal from './AjusteModal'
 import CierreModal from './CierreModal'
+import { useRouter } from 'next/navigation'
+import { avisoListadoParcial } from '@/lib/paginacion'
 
 type SaldoCaja = { saldo_actual: number; total_ingresos: number; total_egresos: number }
 type Filtro = 'TODOS' | 'INGRESO' | 'EGRESO' | 'AJUSTE'
@@ -11,6 +13,7 @@ type Filtro = 'TODOS' | 'INGRESO' | 'EGRESO' | 'AJUSTE'
 type Props = {
   saldo:       SaldoCaja
   movimientos: MovimientoCaja[]
+  totalFilas:  number | null
   cierres:     CierreCaja[]
 }
 
@@ -22,7 +25,9 @@ function formatFecha(d: string) {
   return new Date(d).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
 }
 
-export default function CajaClient({ saldo, movimientos: initial, cierres: initialCierres }: Props) {
+export default function CajaClient({ saldo, movimientos: initial, totalFilas, cierres: initialCierres }: Props) {
+  const aviso = avisoListadoParcial(initial.length, totalFilas)
+  const router = useRouter()
   const [tab, setTab]           = useState<'movimientos' | 'cierres'>('movimientos')
   const [filtro, setFiltro]     = useState<Filtro>('TODOS')
   const [busqueda, setBusqueda] = useState('')
@@ -38,7 +43,7 @@ export default function CajaClient({ saldo, movimientos: initial, cierres: initi
   })
 
   function onSaved() {
-    window.location.reload()
+    router.refresh()
   }
 
   const tipoBadge = (tipo: string) => {
@@ -69,6 +74,12 @@ export default function CajaClient({ saldo, movimientos: initial, cierres: initi
             </button>
           </div>
         </div>
+
+        {aviso && (
+          <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {aviso}
+          </p>
+        )}
 
         {/* Tarjetas resumen */}
         <div className="mb-6 grid grid-cols-3 gap-4">

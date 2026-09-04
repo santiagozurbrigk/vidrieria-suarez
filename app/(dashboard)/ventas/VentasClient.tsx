@@ -1,10 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import type { Cliente, Producto, FacturaVenta } from '@/lib/supabase/types'
+import type { Cliente, Producto, FacturaVenta, ResumenVentas } from '@/lib/supabase/types'
+import { avisoListadoParcial } from '@/lib/paginacion'
 import FacturaVentaModal from './FacturaVentaModal'
 import CobroModal from './CobroModal'
 import { exportarExcel } from '@/lib/exportar'
+import { hoy } from '@/lib/fechas'
+import { useRouter } from 'next/navigation'
 
 type ItemConProducto = {
   id: string
@@ -23,9 +26,11 @@ type ClienteSlim  = Pick<Cliente,  'id' | 'nombre' | 'apellido' | 'razon_social'
 type ProductoSlim = Pick<Producto, 'id' | 'nombre' | 'unidad_medida' | 'precio_venta' | 'stock_actual'>
 
 type Props = {
-  facturas:  FacturaConCliente[]
-  clientes:  ClienteSlim[]
-  productos: ProductoSlim[]
+  facturas:   FacturaConCliente[]
+  totalFilas: number | null
+  resumen:    ResumenVentas
+  clientes:   ClienteSlim[]
+  productos:  ProductoSlim[]
 }
 
 type Filtro = 'TODAS' | 'PENDIENTE' | 'PARCIAL' | 'PAGADA'
@@ -53,8 +58,9 @@ function clienteLabel(c: { nombre: string; apellido: string | null; razon_social
   return [c.nombre, c.apellido].filter(Boolean).join(' ')
 }
 
-export default function VentasClient({ facturas: initial, clientes, productos }: Props) {
-  const [facturas, setFacturas]   = useState(initial)
+export default function VentasClient({ facturas: initial, totalFilas, resumen, clientes, productos }: Props) {
+  const router = useRouter()
+  const facturas = initial
   const [filtro, setFiltro]       = useState<Filtro>('TODAS')
   const [busqueda, setBusqueda]   = useState('')
   const [showModal, setShowModal] = useState(false)
@@ -69,20 +75,22 @@ export default function VentasClient({ facturas: initial, clientes, productos }:
     return matchEstado && matchBusqueda
   })
 
+  // Los contadores y los totales vienen de la base: contar el array cargado
+  // daría los números de la página, no los del negocio.
   const totalesPor: Record<Filtro, number> = {
-    TODAS:     facturas.length,
-    PENDIENTE: facturas.filter((f) => f.estado === 'PENDIENTE').length,
-    PARCIAL:   facturas.filter((f) => f.estado === 'PARCIAL').length,
-    PAGADA:    facturas.filter((f) => f.estado === 'PAGADA').length,
+    TODAS:     resumen.cantidad,
+    PENDIENTE: resumen.pendientes,
+    PARCIAL:   resumen.parciales,
+    PAGADA:    resumen.pagadas,
   }
 
-  // Summary cards
-  const totalFacturado = facturas.reduce((s, f) => s + f.total, 0)
-  const totalPendiente = facturas.reduce((s, f) => s + f.saldo_pendiente, 0)
+  const totalFacturado = resumen.total_facturado
+  const totalPendiente = resumen.total_pendiente
+  const aviso = avisoListadoParcial(facturas.length, totalFilas)
 
   function onSaved() {
     setShowModal(false)
-    window.location.reload()
+    router.refresh()
   }
 
   function toggleExpand(id: string) {
@@ -105,12 +113,18 @@ export default function VentasClient({ facturas: initial, clientes, productos }:
           </button>
         </div>
 
+        {aviso && (
+          <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {aviso}
+          </p>
+        )}
+
         {/* Tarjetas resumen */}
         <div className="mb-6 grid grid-cols-3 gap-4">
           <div className="card p-4">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total facturado</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">{formatCurrency(totalFacturado)}</p>
-            <p className="text-xs text-gray-400 mt-0.5">{facturas.length} facturas</p>
+            <p className="text-xs text-gray-400 mt-0.5">{resumen.cantidad} facturas</p>
           </div>
           <div className="card p-4">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Por cobrar</p>
@@ -122,7 +136,7 @@ export default function VentasClient({ facturas: initial, clientes, productos }:
           <div className="card p-4">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Cobradas</p>
             <p className="mt-1 text-2xl font-bold text-green-600">{totalesPor.PAGADA}</p>
-            <p className="text-xs text-gray-400 mt-0.5">de {facturas.length} facturas</p>
+            <p className="text-xs text-gray-400 mt-0.5">de {resumen.cantidad} facturas</p>
           </div>
         </div>
 
@@ -138,7 +152,7 @@ export default function VentasClient({ facturas: initial, clientes, productos }:
                 'Saldo pendiente': f.saldo_pendiente,
                 'Estado':          ESTADO_LABEL[f.estado] ?? f.estado,
               }))
-              exportarExcel(rows, 'Ventas', `ventas-${new Date().toISOString().slice(0, 10)}`)
+              exportarExcel(rows, 'Ventas', `ventas-${hoy()}`)
             }}
             className="btn-secondary text-sm"
           >
@@ -300,7 +314,7 @@ export default function VentasClient({ facturas: initial, clientes, productos }:
       {cobroFactura && (
         <CobroModal
           factura={cobroFactura}
-          onSaved={() => { setCobroFactura(null); window.location.reload() }}
+          onSaved={() => { setCobroFactura(null); router.refresh() }}
           onClose={() => setCobroFactura(null)}
         />
       )}

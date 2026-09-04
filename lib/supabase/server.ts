@@ -26,3 +26,15 @@ export async function createServerClient() {
     }
   )
 }
+
+/**
+ * Cliente de Supabase junto al usuario logueado.
+ * Lanza si no hay sesión — `ejecutar()` convierte ese throw en un resultado
+ * legible para el navegador.
+ */
+export async function conUsuario() {
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Sesión expirada. Volvé a iniciar sesión.')
+  return { supabase, user }
+}

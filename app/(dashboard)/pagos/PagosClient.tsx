@@ -3,6 +3,9 @@
 import { useState } from 'react'
 import type { Cliente, Proveedor, Pago, FacturaVenta, FacturaCompra } from '@/lib/supabase/types'
 import PagoModal from './PagoModal'
+import { useRouter } from 'next/navigation'
+import { avisoListadoParcial } from '@/lib/paginacion'
+import type { ResumenPagos } from '@/lib/supabase/types'
 
 type Tipo = 'COBRO_CLIENTE' | 'PAGO_PROVEEDOR'
 
@@ -18,6 +21,8 @@ type FacturaCompraSlim = Pick<FacturaCompra, 'id' | 'numero' | 'fecha' | 'total'
 
 type Props = {
   pagos:          PagoConRelaciones[]
+  totalFilas:     number | null
+  resumen:        ResumenPagos
   clientes:       ClienteSlim[]
   proveedores:    ProveedorSlim[]
   facturasVenta:  FacturaVentaSlim[]
@@ -40,8 +45,9 @@ function entidadLabel(p: PagoConRelaciones) {
   return p.proveedores?.razon_social ?? '—'
 }
 
-export default function PagosClient({ pagos: initial, clientes, proveedores, facturasVenta, facturasCompra }: Props) {
-  const [pagos, setPagos]         = useState(initial)
+export default function PagosClient({ pagos: initial, totalFilas, resumen, clientes, proveedores, facturasVenta, facturasCompra }: Props) {
+  const router = useRouter()
+  const pagos = initial
   const [filtro, setFiltro]       = useState<Filtro>('TODOS')
   const [busqueda, setBusqueda]   = useState('')
   const [modalTipo, setModalTipo] = useState<Tipo | null>(null)
@@ -54,12 +60,14 @@ export default function PagosClient({ pagos: initial, clientes, proveedores, fac
     return matchFiltro && matchBusqueda
   })
 
-  const totalCobros = pagos.filter((p) => p.tipo === 'COBRO_CLIENTE').reduce((s, p) => s + p.monto, 0)
-  const totalPagos  = pagos.filter((p) => p.tipo === 'PAGO_PROVEEDOR').reduce((s, p) => s + p.monto, 0)
+  // Totales calculados en la base, no sobre el array cargado.
+  const totalCobros = resumen.total_cobros
+  const totalPagos  = resumen.total_pagos
+  const aviso = avisoListadoParcial(pagos.length, totalFilas)
 
   function onSaved() {
     setModalTipo(null)
-    window.location.reload()
+    router.refresh()
   }
 
   return (
@@ -85,6 +93,12 @@ export default function PagosClient({ pagos: initial, clientes, proveedores, fac
             </button>
           </div>
         </div>
+
+        {aviso && (
+          <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {aviso}
+          </p>
+        )}
 
         {/* Tarjetas resumen */}
         <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3">

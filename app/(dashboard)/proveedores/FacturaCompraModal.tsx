@@ -2,8 +2,9 @@
 
 import { useRef, useState } from 'react'
 import type { Proveedor, Producto } from '@/lib/supabase/types'
-import { registrarFacturaCompraConNuevosProductos } from '@/lib/actions/proveedores'
+import { registrarFacturaCompra } from '@/lib/actions/proveedores'
 import { extraerFacturaDesdeArchivo, type ItemExtraido } from '@/lib/actions/extraerFactura'
+import { hoy } from '@/lib/fechas'
 
 type Item = {
   producto_id: string   // UUID si existe en DB; '' si es producto nuevo
@@ -28,16 +29,37 @@ function formatCurrency(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 }
 
-/** Intenta encontrar el producto con nombre más similar al texto extraído por la IA */
+function normalizar(texto: string) {
+  return texto
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')  // sin tildes
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Busca el producto existente que corresponde al renglón leído por la IA.
+ *
+ * Sólo acepta coincidencias inequívocas: exacta, o una única coincidencia por
+ * prefijo. El criterio anterior aceptaba substring en ambas direcciones, así
+ * que un renglón "Vidrio" matcheaba "Vidrio float 4mm incoloro" y el ítem se
+ * cargaba contra el producto equivocado, cuyo costo y stock los triggers
+ * después actualizan. Ante la duda conviene ofrecerlo como producto nuevo y
+ * que decida la persona.
+ */
 function matchProduct(
   nombre: string,
   productos: Pick<Producto, 'id' | 'nombre' | 'unidad_medida' | 'costo_actual'>[],
 ) {
-  const q = nombre.toLowerCase()
-  return (
-    productos.find((p) => p.nombre.toLowerCase() === q) ??
-    productos.find((p) => p.nombre.toLowerCase().includes(q) || q.includes(p.nombre.toLowerCase()))
-  )
+  const q = normalizar(nombre)
+  if (!q) return undefined
+
+  const exacto = productos.find((p) => normalizar(p.nombre) === q)
+  if (exacto) return exacto
+
+  const porPrefijo = productos.filter((p) => normalizar(p.nombre).startsWith(q))
+  return porPrefijo.length === 1 ? porPrefijo[0] : undefined
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -57,7 +79,7 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
 
   // Campos de cabecera controlados (la IA los rellena automáticamente)
   const [numero, setNumero] = useState('')
-  const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10))
+  const [fecha, setFecha] = useState(hoy())
   const [tipoComprobante, setTipoComprobante] = useState('FACTURA')
   const [notas, setNotas] = useState('')
 
@@ -95,7 +117,7 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
 
     const data = result.data
 
-    // Pre-rellenar cabecera
+    // Pre-rellenar cabecera con lo que la IA haya podido leer
     if (data.numero) setNumero(data.numero)
     if (data.fecha) setFecha(data.fecha)
     if (data.tipo_comprobante) setTipoComprobante(data.tipo_comprobante)
@@ -116,48 +138,49 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
    * Omite duplicados ya presentes en la tabla.
    */
   function autoPopularItems(sugeridos: ItemExtraido[]) {
-    const nuevos: Item[] = []
+    // La deduplicación se calcula DENTRO del updater: leer `items` del closure
+    // daba la lista previa al último render, así que subir dos comprobantes
+    // seguidos duplicaba renglones.
+    setItems((prev) => {
+      const nuevos: Item[] = []
 
-    for (const s of sugeridos) {
-      const match = matchProduct(s.nombre, productos)
+      for (const s of sugeridos) {
+        const yaEstan = [...prev, ...nuevos]
+        const match = matchProduct(s.nombre, productos)
 
-      if (match) {
-        // Ya en la tabla → omitir
-        if (items.find((x) => x.producto_id === match.id)) continue
-        nuevos.push({
-          producto_id: match.id,
-          nombre: match.nombre,
-          unidad_medida: match.unidad_medida,
-          cantidad: s.cantidad,
-          costo_unitario: s.costo_unitario,
-          subtotal: s.cantidad * s.costo_unitario,
-          isNew: false,
-        })
-      } else {
-        // Producto nuevo — omitir si ya hay uno con mismo nombre
-        if (nuevos.find((x) => x.isNew && x.nombre.toLowerCase() === s.nombre.toLowerCase())) continue
-        if (items.find((x) => x.isNew && x.nombre.toLowerCase() === s.nombre.toLowerCase())) continue
-        nuevos.push({
-          producto_id: '',
-          nombre: s.nombre,
-          unidad_medida: 'UNIDAD',
-          cantidad: s.cantidad,
-          costo_unitario: s.costo_unitario,
-          subtotal: s.cantidad * s.costo_unitario,
-          isNew: true,
-        })
+        if (match) {
+          if (yaEstan.some((x) => x.producto_id === match.id)) continue
+          nuevos.push({
+            producto_id: match.id,
+            nombre: match.nombre,
+            unidad_medida: match.unidad_medida,
+            cantidad: s.cantidad,
+            costo_unitario: s.costo_unitario,
+            subtotal: s.cantidad * s.costo_unitario,
+            isNew: false,
+          })
+        } else {
+          const nombre = normalizar(s.nombre)
+          if (yaEstan.some((x) => x.isNew && normalizar(x.nombre) === nombre)) continue
+          nuevos.push({
+            producto_id: '',
+            nombre: s.nombre,
+            unidad_medida: 'UNIDAD',
+            cantidad: s.cantidad,
+            costo_unitario: s.costo_unitario,
+            subtotal: s.cantidad * s.costo_unitario,
+            isNew: true,
+          })
+        }
       }
-    }
 
-    if (nuevos.length > 0) {
-      setItems((prev) => [...prev, ...nuevos])
       setIaResumen({
         existentes: nuevos.filter((x) => !x.isNew).length,
         nuevos: nuevos.filter((x) => x.isNew).length,
       })
-    } else if (sugeridos.length > 0) {
-      setIaResumen({ existentes: 0, nuevos: 0 })
-    }
+
+      return nuevos.length > 0 ? [...prev, ...nuevos] : prev
+    })
   }
 
   // ── Gestión manual de ítems ──────────────────────────────────────────────
@@ -205,31 +228,38 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
     }
 
     setLoading(true)
-    try {
-      // Mapear ítems al formato del server action
-      const itemsPayload = items.map((item) =>
-        item.isNew
-          ? { nombre_nuevo: item.nombre.trim(), cantidad: item.cantidad, costo_unitario: item.costo_unitario, subtotal: item.subtotal }
-          : { producto_id: item.producto_id, cantidad: item.cantidad, costo_unitario: item.costo_unitario, subtotal: item.subtotal },
-      )
+    const itemsPayload = items.map((item) =>
+      item.isNew
+        ? {
+            nombre_nuevo: item.nombre.trim(),
+            unidad_medida: item.unidad_medida,
+            cantidad: item.cantidad,
+            costo_unitario: item.costo_unitario,
+            subtotal: item.subtotal,
+          }
+        : {
+            producto_id: item.producto_id,
+            cantidad: item.cantidad,
+            costo_unitario: item.costo_unitario,
+            subtotal: item.subtotal,
+          },
+    )
 
-      await registrarFacturaCompraConNuevosProductos({
-        proveedor_id: proveedor.id,
-        numero,
-        fecha,
-        tipo_comprobante: tipoComprobante,
-        subtotal,
-        iva,
-        total,
-        notas,
-        items: itemsPayload,
-      })
-      onSaved()
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error al registrar factura')
-    } finally {
-      setLoading(false)
-    }
+    const r = await registrarFacturaCompra({
+      proveedor_id: proveedor.id,
+      // Vacío ⇒ la base asigna el siguiente número correlativo.
+      numero,
+      fecha,
+      tipo_comprobante: tipoComprobante,
+      subtotal,
+      iva,
+      total,
+      notas,
+      items: itemsPayload,
+    })
+    setLoading(false)
+    if (!r.ok) { setError(r.error); return }
+    onSaved()
   }
 
   const newCount = items.filter((x) => x.isNew).length
@@ -308,7 +338,7 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
             {/* ── Campos de cabecera ── */}
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="label">Número *</label>
+                <label className="label">Número * <span className="font-normal text-gray-400">(el del proveedor)</span></label>
                 <input
                   value={numero}
                   onChange={(e) => setNumero(e.target.value)}

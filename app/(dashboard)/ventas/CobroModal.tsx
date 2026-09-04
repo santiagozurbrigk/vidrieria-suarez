@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { registrarCobroVenta } from '@/lib/actions/ventas'
+import { hoy } from '@/lib/fechas'
 
 type Props = {
   factura: {
@@ -21,7 +22,7 @@ function formatCurrency(n: number) {
 export default function CobroModal({ factura, onSaved, onClose }: Props) {
   const [monto,     setMonto]     = useState(factura.saldo_pendiente)
   const [medioPago, setMedioPago] = useState('EFECTIVO')
-  const [fecha,     setFecha]     = useState(new Date().toISOString().slice(0, 10))
+  const [fecha,     setFecha]     = useState(hoy())
   const [notas,     setNotas]     = useState('')
   const [loading,   setLoading]   = useState(false)
   const [error,     setError]     = useState<string | null>(null)
@@ -35,20 +36,16 @@ export default function CobroModal({ factura, onSaved, onClose }: Props) {
     e.preventDefault()
     setError(null)
     setLoading(true)
-    try {
-      await registrarCobroVenta({
-        factura_id: factura.id,
-        monto,
-        medio_pago: medioPago,
-        fecha,
-        notas: notas || undefined,
-      })
-      onSaved()
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error al registrar cobro')
-    } finally {
-      setLoading(false)
-    }
+    const r = await registrarCobroVenta({
+      factura_id: factura.id,
+      monto,
+      medio_pago: medioPago,
+      fecha,
+      notas,
+    })
+    setLoading(false)
+    if (!r.ok) { setError(r.error); return }
+    onSaved()
   }
 
   return (

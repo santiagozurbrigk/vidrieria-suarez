@@ -19,16 +19,12 @@ export default function ProveedorModal({ proveedor, onSaved, onClose }: Props) {
     setError(null)
     setLoading(true)
     const fd = new FormData(e.currentTarget)
-    try {
-      const result = proveedor
-        ? await actualizarProveedor(proveedor.id, fd)
-        : await crearProveedor(fd)
-      if (result) onSaved(result)
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error al guardar')
-    } finally {
-      setLoading(false)
-    }
+    const r = proveedor
+      ? await actualizarProveedor(proveedor.id, fd)
+      : await crearProveedor(fd)
+    setLoading(false)
+    if (!r.ok) { setError(r.error); return }
+    onSaved(r.data)
   }
 
   return (
@@ -78,9 +74,13 @@ export default function ProveedorModal({ proveedor, onSaved, onClose }: Props) {
               <input name="alias_cbu" defaultValue={proveedor?.alias_cbu ?? ''} className="input" />
             </div>
             <div>
-              <label className="label">Dirección</label>
-              <input name="direccion" defaultValue={proveedor?.direccion ?? ''} className="input" />
+              <label className="label">CBU</label>
+              <input name="cbu" defaultValue={proveedor?.cbu ?? ''} className="input" placeholder="22 dígitos" />
             </div>
+          </div>
+          <div>
+            <label className="label">Dirección</label>
+            <input name="direccion" defaultValue={proveedor?.direccion ?? ''} className="input" />
           </div>
           <div>
             <label className="label">Notas</label>

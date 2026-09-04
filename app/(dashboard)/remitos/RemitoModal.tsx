@@ -41,24 +41,20 @@ export default function RemitoModal({ clientes, facturasVenta, onSaved, onClose 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!clienteId) { setError('Seleccioná un cliente'); return }
-    if (!numero.trim()) { setError('Ingresá el número de remito'); return }
 
     setLoading(true)
     setError('')
-    try {
-      await crearRemito({
-        cliente_id:       clienteId,
-        factura_venta_id: facturaId || null,
-        numero:           numero.trim(),
-        fecha,
-        notas:            notas.trim() || undefined,
-      })
-      onSaved()
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error al crear remito')
-    } finally {
-      setLoading(false)
-    }
+    const r = await crearRemito({
+      cliente_id:       clienteId,
+      factura_venta_id: facturaId || null,
+      // Vacío ⇒ la base asigna el siguiente número correlativo.
+      numero:           numero.trim(),
+      fecha,
+      notas:            notas.trim(),
+    })
+    setLoading(false)
+    if (!r.ok) { setError(r.error); return }
+    onSaved()
   }
 
   return (
@@ -77,14 +73,13 @@ export default function RemitoModal({ clientes, facturasVenta, onSaved, onClose 
           {/* Numero + Fecha */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="label">Número de remito *</label>
+              <label className="label">Número de remito</label>
               <input
                 type="text"
                 value={numero}
                 onChange={(e) => setNumero(e.target.value)}
-                placeholder="R-0001"
+                placeholder="Automático"
                 className="input"
-                required
               />
             </div>
             <div>

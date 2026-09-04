@@ -14,12 +14,10 @@ export default function ClienteModal({ cliente, onSaved, onClose }: Props) {
     e.preventDefault()
     setError(null); setLoading(true)
     const fd = new FormData(e.currentTarget)
-    try {
-      const r = cliente ? await actualizarCliente(cliente.id, fd) : await crearCliente(fd)
-      if (r) onSaved(r)
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error')
-    } finally { setLoading(false) }
+    const r = cliente ? await actualizarCliente(cliente.id, fd) : await crearCliente(fd)
+    setLoading(false)
+    if (!r.ok) { setError(r.error); return }
+    onSaved(r.data)
   }
 
   return (
@@ -46,6 +44,16 @@ export default function ClienteModal({ cliente, onSaved, onClose }: Props) {
               <label className="label">CUIT</label>
               <input name="cuit" defaultValue={cliente?.cuit ?? ''} className="input" placeholder="20-12345678-9" />
             </div>
+          </div>
+          <div>
+            <label className="label">Condición IVA</label>
+            <select name="condicion_iva" defaultValue={cliente?.condicion_iva ?? ''} className="input">
+              <option value="">— Sin especificar —</option>
+              <option value="RESPONSABLE_INSCRIPTO">Responsable Inscripto</option>
+              <option value="MONOTRIBUTISTA">Monotributista</option>
+              <option value="EXENTO">Exento</option>
+              <option value="CONSUMIDOR_FINAL">Consumidor Final</option>
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

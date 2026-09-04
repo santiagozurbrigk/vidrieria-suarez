@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { Arquitecto, Cliente, Producto } from '@/lib/supabase/types'
 import { crearPresupuesto } from '@/lib/actions/presupuestos'
+import { hoy } from '@/lib/fechas'
 
 type Item = {
   producto_id: string | null
@@ -43,7 +44,7 @@ export default function PresupuestoModal({ arquitectos, clientes, productos, onS
   const [clienteId, setClienteId]       = useState('')
   const [obra, setObra]                 = useState('')
   const [numero, setNumero]             = useState('')
-  const [fecha, setFecha]               = useState(new Date().toISOString().slice(0, 10))
+  const [fecha, setFecha]               = useState(hoy())
   const [validezDias, setValidezDias]   = useState(30)
   const [notas, setNotas]               = useState('')
   const [items, setItems]               = useState<Item[]>([])
@@ -102,22 +103,19 @@ export default function PresupuestoModal({ arquitectos, clientes, productos, onS
     if (emptyDesc) { setError('Todos los ítems deben tener descripción.'); return }
 
     setLoading(true)
-    try {
-      await crearPresupuesto({
-        arquitecto_id: arquitectoId,
-        cliente_id:    clienteId || null,
-        obra:          obra || null,
-        numero, fecha,
-        validez_dias:  validezDias,
-        notas:         notas || null,
-        items,
-      })
-      onSaved()
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error al crear presupuesto')
-    } finally {
-      setLoading(false)
-    }
+    const r = await crearPresupuesto({
+      arquitecto_id: arquitectoId,
+      cliente_id:    clienteId || null,
+      obra:          obra || null,
+      // Vacío ⇒ la base asigna el siguiente número correlativo.
+      numero, fecha,
+      validez_dias:  validezDias,
+      notas:         notas || null,
+      items,
+    })
+    setLoading(false)
+    if (!r.ok) { setError(r.error); return }
+    onSaved()
   }
 
   const productosDisponibles = productos.filter((p) => !items.find((x) => x.producto_id === p.id))
@@ -179,13 +177,12 @@ export default function PresupuestoModal({ arquitectos, clientes, productos, onS
             {/* Cabecera */}
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="label">Número *</label>
+                <label className="label">Número</label>
                 <input
                   value={numero}
                   onChange={(e) => setNumero(e.target.value)}
-                  required
                   className="input"
-                  placeholder="PRES-0001"
+                  placeholder="Automático"
                 />
               </div>
               <div>

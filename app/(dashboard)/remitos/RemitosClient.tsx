@@ -5,6 +5,9 @@ import type { Remito } from '@/lib/supabase/types'
 import RemitoModal from './RemitoModal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { actualizarEstadoRemito, eliminarRemito } from '@/lib/actions/remitos'
+import { useRouter } from 'next/navigation'
+import { avisoListadoParcial } from '@/lib/paginacion'
+import type { ResumenRemitos } from '@/lib/supabase/types'
 
 type RemitoConRelaciones = Remito & {
   clientes:       { nombre: string; apellido: string | null; razon_social: string | null } | null
@@ -16,6 +19,8 @@ type FacturaSlim = { id: string; numero: string; cliente_id: string; total: numb
 
 type Props = {
   remitos:       RemitoConRelaciones[]
+  totalFilas:    number | null
+  resumen:       ResumenRemitos
   clientes:      ClienteSlim[]
   facturasVenta: FacturaSlim[]
 }
@@ -39,7 +44,10 @@ function clienteLabel(c: { nombre: string; apellido: string | null; razon_social
   return [c.nombre, c.apellido].filter(Boolean).join(' ')
 }
 
-export default function RemitosClient({ remitos, clientes, facturasVenta }: Props) {
+export default function RemitosClient({ remitos, totalFilas, resumen, clientes, facturasVenta }: Props) {
+  const aviso = avisoListadoParcial(remitos.length, totalFilas)
+  const router = useRouter()
+  const [accionError, setAccionError] = useState<string | null>(null)
   const [filtro,    setFiltro]    = useState<Filtro>('TODOS')
   const [busqueda,  setBusqueda]  = useState('')
   const [showModal,    setShowModal]    = useState(false)
@@ -57,38 +65,33 @@ export default function RemitosClient({ remitos, clientes, facturasVenta }: Prop
 
   const totalesPor: Record<Filtro, number> = {
     TODOS:     remitos.length,
-    PENDIENTE: remitos.filter((r) => r.estado === 'PENDIENTE').length,
-    ENTREGADO: remitos.filter((r) => r.estado === 'ENTREGADO').length,
-    CANCELADO: remitos.filter((r) => r.estado === 'CANCELADO').length,
+    PENDIENTE: resumen.pendientes,
+    ENTREGADO: resumen.entregados,
+    CANCELADO: resumen.cancelados,
   }
 
   async function cambiarEstado(id: string, estado: string) {
     setUpdating(id)
-    try {
-      await actualizarEstadoRemito(id, estado)
-      window.location.reload()
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Error al actualizar')
-      setUpdating(null)
-    }
+    const r = await actualizarEstadoRemito(id, estado)
+    setUpdating(null)
+    if (!r.ok) { setAccionError(r.error); return }
+    setAccionError(null)
+    router.refresh()
   }
 
   function onSaved() {
     setShowModal(false)
-    window.location.reload()
+    router.refresh()
   }
 
   async function handleDelete() {
     if (!deleteRemito) return
     setDeleting(true)
-    try {
-      await eliminarRemito(deleteRemito.id)
-      setDeleteRemito(null)
-      window.location.reload()
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Error al eliminar')
-      setDeleting(false)
-    }
+    const r = await eliminarRemito(deleteRemito.id)
+    setDeleting(false)
+    if (!r.ok) { setAccionError(r.error); return }
+    setDeleteRemito(null)
+    router.refresh()
   }
 
   return (
@@ -106,6 +109,17 @@ export default function RemitosClient({ remitos, clientes, facturasVenta }: Prop
             + Nuevo remito
           </button>
         </div>
+        {aviso && (
+          <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            {aviso}
+          </p>
+        )}
+        {accionError && (
+          <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+            {accionError}
+          </p>
+        )}
+
 
         {/* Tarjetas resumen */}
         <div className="mb-6 grid grid-cols-3 gap-4">

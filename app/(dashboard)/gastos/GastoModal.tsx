@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { CategoriaGasto, Gasto } from '@/lib/supabase/types'
 import { registrarGasto, editarGasto } from '@/lib/actions/gastos'
+import { hoy } from '@/lib/fechas'
 
 const MEDIOS_PAGO = ['Efectivo', 'Transferencia', 'Tarjeta débito', 'Tarjeta crédito', 'Cheque', 'Otro']
 
@@ -19,7 +20,7 @@ export default function GastoModal({ categorias, gasto, onSaved, onClose }: Prop
   const [categoriaId, setCategoriaId] = useState(gasto?.categoria_id ?? '')
   const [concepto,    setConcepto]    = useState(gasto?.concepto ?? '')
   const [monto,       setMonto]       = useState(gasto?.monto?.toString() ?? '')
-  const [fecha,       setFecha]       = useState(gasto?.fecha ?? new Date().toISOString().slice(0, 10))
+  const [fecha,       setFecha]       = useState(gasto?.fecha ?? hoy())
   const [medioPago,   setMedioPago]   = useState(gasto?.medio_pago ?? 'Efectivo')
   const [notas,       setNotas]       = useState(gasto?.notas ?? '')
   const [loading,     setLoading]     = useState(false)
@@ -29,21 +30,13 @@ export default function GastoModal({ categorias, gasto, onSaved, onClose }: Prop
     e.preventDefault()
     setError(null)
     setLoading(true)
-    try {
-      const payload = { categoria_id: categoriaId, concepto, monto, medio_pago: medioPago, fecha, notas }
-      if (isEdit) {
-        await editarGasto(gasto!.id, payload)
-      } else {
-        const fd = new FormData()
-        Object.entries(payload).forEach(([k, v]) => fd.append(k, v))
-        await registrarGasto(fd)
-      }
-      onSaved()
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error al guardar gasto')
-    } finally {
-      setLoading(false)
-    }
+    const payload = { categoria_id: categoriaId, concepto, monto, medio_pago: medioPago, fecha, notas }
+    const r = isEdit
+      ? await editarGasto(gasto!.id, payload)
+      : await registrarGasto(payload)
+    setLoading(false)
+    if (!r.ok) { setError(r.error); return }
+    onSaved()
   }
 
   return (

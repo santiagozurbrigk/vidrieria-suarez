@@ -1,136 +1,124 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { createServerClient } from '@/lib/supabase/server'
+import { conUsuario } from '@/lib/supabase/server'
+import { ejecutar, type Resultado } from '@/lib/resultado'
+import { fechaISO, parsear, textoOpcional, textoRequerido } from '@/lib/validacion'
+import type { FacturaVenta, Presupuesto } from '@/lib/supabase/types'
 
-// ── Schema ─────────────────────────────────────────────────────────────────────
-const ItemSchema = z.object({
-  producto_id:    z.string().nullable().optional(),
-  descripcion:    z.string().min(1),
-  cantidad:       z.number().positive(),
-  precio_unitario: z.number().min(0),
-  subtotal:       z.number().min(0),
+const ESTADOS_ELIMINABLES = ['BORRADOR', 'RECHAZADO']
+
+const itemSchema = z.object({
+  producto_id:     z.string().uuid().nullable().optional(),
+  descripcion:     textoRequerido('Cada ítem necesita una descripción'),
+  cantidad:        z.coerce.number().positive('La cantidad debe ser mayor a cero'),
+  precio_unitario: z.coerce.number().min(0),
+  subtotal:        z.coerce.number().min(0),
 })
 
-const PresupuestoSchema = z.object({
-  arquitecto_id: z.string().uuid(),
+const presupuestoSchema = z.object({
+  arquitecto_id: z.string().uuid('Seleccioná un arquitecto'),
   cliente_id:    z.string().uuid().nullable().optional(),
-  obra:          z.string().nullable().optional(),
-  numero:        z.string().min(1),
-  fecha:         z.string(),
-  validez_dias:  z.number().int().positive().default(30),
-  notas:         z.string().nullable().optional(),
-  items:         z.array(ItemSchema).min(1),
+  obra:          textoOpcional,
+  numero:        textoOpcional,
+  fecha:         fechaISO,
+  validez_dias:  z.coerce.number().int().positive().default(30),
+  notas:         textoOpcional,
+  items:         z.array(itemSchema).min(1, 'Agregá al menos un ítem'),
 })
 
-// ── crearPresupuesto ───────────────────────────────────────────────────────────
-export async function crearPresupuesto(payload: unknown) {
-  const parsed = PresupuestoSchema.safeParse(payload)
-  if (!parsed.success) throw new Error(parsed.error.errors[0].message)
-  const { items, ...header } = parsed.data
+export async function crearPresupuesto(payload: unknown): Promise<Resultado<Presupuesto>> {
+  return ejecutar(async () => {
+    const data = parsear(presupuestoSchema, payload)
+    const { supabase } = await conUsuario()
 
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('No autenticado')
-
-  // Insert header (total is auto-updated by trigger after items)
-  const { data: pres, error: presError } = await supabase
-    .from('presupuestos')
-    .insert({ ...header, created_by: user.id })
-    .select('id')
-    .single()
-  if (presError) throw new Error(presError.message)
-
-  const rows = items.map((item) => ({ ...item, presupuesto_id: pres.id }))
-  const { error: itemsError } = await supabase.from('presupuesto_items').insert(rows)
-  if (itemsError) {
-    // Rollback orphan
-    await supabase.from('presupuestos').delete().eq('id', pres.id)
-    throw new Error(itemsError.message)
-  }
-}
-
-// ── eliminarPresupuesto ────────────────────────────────────────────────────────
-export async function eliminarPresupuesto(id: string) {
-  const supabase = await createServerClient()
-
-  // Verify it's in a deletable state
-  const { data: pres } = await supabase.from('presupuestos').select('estado').eq('id', id).single()
-  if (!pres) throw new Error('Presupuesto no encontrado')
-  if (!['BORRADOR', 'RECHAZADO'].includes(pres.estado)) {
-    throw new Error('Solo se pueden eliminar presupuestos en estado Borrador o Rechazado')
-  }
-
-  // Delete items first (FK)
-  await supabase.from('presupuesto_items').delete().eq('presupuesto_id', id)
-  const { error } = await supabase.from('presupuestos').delete().eq('id', id)
-  if (error) throw new Error(error.message)
-}
-
-// ── actualizarEstado ───────────────────────────────────────────────────────────
-export async function actualizarEstadoPresupuesto(id: string, estado: string) {
-  const supabase = await createServerClient()
-  const { error } = await supabase.from('presupuestos').update({ estado }).eq('id', id)
-  if (error) throw new Error(error.message)
-}
-
-// ── convertirEnFactura ─────────────────────────────────────────────────────────
-// Creates a factura_venta from an approved presupuesto and links back
-export async function convertirPresupuestoEnFactura(presupuestoId: string, numero: string) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('No autenticado')
-
-  // Fetch presupuesto with items
-  const { data: pres, error: presError } = await supabase
-    .from('presupuestos')
-    .select('*, presupuesto_items(*)')
-    .eq('id', presupuestoId)
-    .single()
-  if (presError || !pres) throw new Error('Presupuesto no encontrado')
-  if (!pres.cliente_id) throw new Error('El presupuesto debe tener un cliente para convertirse en factura')
-
-  const items = (pres.presupuesto_items as Array<{
-    producto_id: string | null; descripcion: string; cantidad: number; precio_unitario: number; subtotal: number
-  }>).filter((i) => i.producto_id) // only items linked to a product can go to a factura
-
-  if (items.length === 0) throw new Error('Ningún ítem del presupuesto tiene producto asociado')
-
-  // Insert factura
-  const { data: factura, error: facturaError } = await supabase
-    .from('facturas_venta')
-    .insert({
-      cliente_id: pres.cliente_id,
-      numero,
-      fecha: new Date().toISOString().slice(0, 10),
-      tipo_comprobante: 'FACTURA',
-      subtotal: pres.total,
-      iva: 0,
-      total: pres.total,
-      saldo_pendiente: pres.total,
-      created_by: user.id,
+    const { data: presupuesto, error } = await supabase.rpc('crear_presupuesto', {
+      p_arquitecto_id: data.arquitecto_id,
+      p_cliente_id:    data.cliente_id ?? null,
+      p_obra:          data.obra,
+      p_fecha:         data.fecha,
+      p_validez_dias:  data.validez_dias,
+      p_notas:         data.notas,
+      p_items:         data.items,
+      // null ⇒ la base asigna el siguiente número correlativo.
+      p_numero:        data.numero,
     })
-    .select('id')
-    .single()
-  if (facturaError) throw new Error(facturaError.message)
+    if (error) throw error
 
-  // Insert factura items
-  const facturaItems = items.map((i) => ({
-    factura_venta_id: factura.id,
-    producto_id: i.producto_id!,
-    cantidad: i.cantidad,
-    precio_unitario: i.precio_unitario,
-    subtotal: i.subtotal,
-  }))
-  const { error: itemsError } = await supabase.from('factura_venta_items').insert(facturaItems)
-  if (itemsError) {
-    await supabase.from('facturas_venta').delete().eq('id', factura.id)
-    throw new Error(itemsError.message)
-  }
+    revalidatePath('/presupuestos')
+    revalidatePath('/')
+    return presupuesto
+  })
+}
 
-  // Link presupuesto → factura
-  await supabase.from('presupuestos').update({
-    convertido_en_factura_id: factura.id,
-    estado: 'CONVERTIDO',
-  }).eq('id', presupuestoId)
+export async function eliminarPresupuesto(id: string): Promise<Resultado> {
+  return ejecutar(async () => {
+    const { supabase } = await conUsuario()
+
+    const { data: pres, error: errorLectura } = await supabase
+      .from('presupuestos')
+      .select('estado')
+      .eq('id', id)
+      .single()
+    if (errorLectura) throw errorLectura
+    if (!ESTADOS_ELIMINABLES.includes(pres.estado)) {
+      throw new Error('Sólo se pueden eliminar presupuestos en estado Borrador o Rechazado')
+    }
+
+    // Los ítems se borran por la FK on delete cascade; se hace explícito por si
+    // el esquema no la tuviera.
+    await supabase.from('presupuesto_items').delete().eq('presupuesto_id', id)
+
+    const { error } = await supabase.from('presupuestos').delete().eq('id', id)
+    if (error) throw error
+
+    revalidatePath('/presupuestos')
+    revalidatePath('/')
+  })
+}
+
+export async function actualizarEstadoPresupuesto(id: string, estado: string): Promise<Resultado> {
+  return ejecutar(async () => {
+    const nuevoEstado = parsear(
+      z.enum(['BORRADOR', 'ENVIADO', 'APROBADO', 'RECHAZADO']),
+      estado,
+    )
+    const { supabase } = await conUsuario()
+
+    const { error } = await supabase
+      .from('presupuestos')
+      .update({ estado: nuevoEstado })
+      .eq('id', id)
+    if (error) throw error
+
+    revalidatePath('/presupuestos')
+    revalidatePath('/')
+  })
+}
+
+/**
+ * Convierte un presupuesto aprobado en factura de venta y las vincula.
+ * Todo dentro de una transacción: si el descuento de stock falla, el
+ * presupuesto queda sin tocar en vez de marcado como convertido.
+ */
+export async function convertirPresupuestoEnFactura(
+  presupuestoId: string,
+  numero?: string,
+): Promise<Resultado<FacturaVenta>> {
+  return ejecutar(async () => {
+    const { supabase } = await conUsuario()
+
+    const { data: factura, error } = await supabase.rpc('convertir_presupuesto_en_factura', {
+      p_presupuesto_id: presupuestoId,
+      p_numero:         numero?.trim() || null,
+    })
+    if (error) throw error
+
+    revalidatePath('/presupuestos')
+    revalidatePath('/ventas')
+    revalidatePath('/stock')
+    revalidatePath('/')
+    return factura
+  })
 }

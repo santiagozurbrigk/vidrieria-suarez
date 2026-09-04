@@ -21,14 +21,10 @@ export default function MovimientoModal({ producto, onSaved, onClose }: Props) {
     setError(null)
     setLoading(true)
     const fd = new FormData(e.currentTarget)
-    try {
-      const result = await registrarMovimiento(producto.id, fd)
-      if (result) onSaved(result)
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error al registrar movimiento')
-    } finally {
-      setLoading(false)
-    }
+    const r = await registrarMovimiento(producto.id, fd)
+    setLoading(false)
+    if (!r.ok) { setError(r.error); return }
+    onSaved(r.data)
   }
 
   return (

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { Cliente, Producto } from '@/lib/supabase/types'
 import { registrarFacturaVenta } from '@/lib/actions/ventas'
+import { hoy } from '@/lib/fechas'
 
 type Item = {
   producto_id: string
@@ -39,7 +40,7 @@ export default function FacturaVentaModal({ clientes, productos, onSaved, onClos
   const [items, setItems]       = useState<Item[]>([])
   const [clienteId, setClienteId] = useState('')
   const [numero, setNumero]     = useState('')
-  const [fecha, setFecha]       = useState(new Date().toISOString().slice(0, 10))
+  const [fecha, setFecha]       = useState(hoy())
   const [tipo, setTipo]         = useState('FACTURA')
   const [iva, setIva]           = useState(0)
   const [notas, setNotas]       = useState('')
@@ -96,22 +97,19 @@ export default function FacturaVentaModal({ clientes, productos, onSaved, onClos
     }
 
     setLoading(true)
-    try {
-      await registrarFacturaVenta({
-        cliente_id: clienteId,
-        numero, fecha,
-        tipo_comprobante: tipo,
-        subtotal, iva, total, notas,
-        items: items.map(({ producto_id, cantidad, precio_unitario, subtotal: st }) => ({
-          producto_id, cantidad, precio_unitario, subtotal: st,
-        })),
-      })
-      onSaved()
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Error al registrar factura')
-    } finally {
-      setLoading(false)
-    }
+    const r = await registrarFacturaVenta({
+      cliente_id: clienteId,
+      // Vacío ⇒ la base asigna el siguiente número correlativo.
+      numero, fecha,
+      tipo_comprobante: tipo,
+      subtotal, iva, total, notas,
+      items: items.map(({ producto_id, cantidad, precio_unitario, subtotal: st }) => ({
+        producto_id, cantidad, precio_unitario, subtotal: st,
+      })),
+    })
+    setLoading(false)
+    if (!r.ok) { setError(r.error); return }
+    onSaved()
   }
 
   const productosDisponibles = productos.filter(
@@ -149,13 +147,12 @@ export default function FacturaVentaModal({ clientes, productos, onSaved, onClos
             {/* Cabecera */}
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="label">Número *</label>
+                <label className="label">Número</label>
                 <input
                   value={numero}
                   onChange={(e) => setNumero(e.target.value)}
-                  required
                   className="input"
-                  placeholder="0001-00000001"
+                  placeholder="Automático"
                 />
               </div>
               <div>
