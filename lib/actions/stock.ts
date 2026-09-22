@@ -53,11 +53,18 @@ export async function actualizarProducto(id: string, formData: FormData): Promis
   })
 }
 
-const movimientoSchema = z.object({
-  tipo:     z.enum(['ENTRADA', 'SALIDA', 'AJUSTE']),
-  cantidad: z.coerce.number().positive('La cantidad debe ser mayor a 0'),
-  motivo:   textoOpcional,
-})
+// En ENTRADA y SALIDA, `cantidad` es cuánto se mueve y tiene que ser > 0.
+// En AJUSTE es el stock contado, que puede dar cero.
+const movimientoSchema = z
+  .object({
+    tipo:     z.enum(['ENTRADA', 'SALIDA', 'AJUSTE']),
+    cantidad: z.coerce.number().min(0, 'La cantidad no puede ser negativa'),
+    motivo:   textoOpcional,
+  })
+  .refine((d) => d.tipo === 'AJUSTE' || d.cantidad > 0, {
+    message: 'La cantidad debe ser mayor a 0',
+    path:    ['cantidad'],
+  })
 
 export async function registrarMovimiento(
   productoId: string,
@@ -67,8 +74,9 @@ export async function registrarMovimiento(
     const data = parsear(movimientoSchema, Object.fromEntries(formData))
     const { supabase, user } = await conUsuario()
 
-    // El trigger de stock aplica el movimiento sobre productos.stock_actual y
-    // rechaza las salidas sin existencias suficientes.
+    // El trigger de stock aplica el movimiento sobre productos.stock_actual:
+    // suma la ENTRADA, resta la SALIDA (rechazándola si no alcanza el stock) y
+    // en un AJUSTE deja el stock en la cantidad contada.
     const { error } = await supabase.from('movimientos_stock').insert({
       producto_id: productoId,
       tipo:        data.tipo,
