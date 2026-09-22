@@ -61,7 +61,7 @@ export default function ProveedoresClient({ proveedores: initial, productos }: P
                 <th className="table-th">Condición IVA</th>
                 <th className="table-th">Contacto</th>
                 <th className="table-th">Teléfono</th>
-                <th className="table-th">Alias CBU</th>
+                <th className="table-th">Alias / CBU</th>
                 <th className="table-th"></th>
               </tr>
             </thead>
@@ -79,7 +79,14 @@ export default function ProveedoresClient({ proveedores: initial, productos }: P
                   </td>
                   <td className="table-td text-gray-500">{p.contacto ?? '—'}</td>
                   <td className="table-td text-gray-500">{p.telefono ?? '—'}</td>
-                  <td className="table-td text-gray-500">{p.alias_cbu ?? '—'}</td>
+                  <td className="table-td text-gray-500">
+                    {p.alias_cbu || p.cbu ? (
+                      <div className="leading-tight">
+                        {p.alias_cbu && <div>{p.alias_cbu}</div>}
+                        {p.cbu && <div className="font-mono text-xs text-gray-400">{p.cbu}</div>}
+                      </div>
+                    ) : '—'}
+                  </td>
                   <td className="table-td">
                     <div className="flex gap-2 justify-end">
                       <button

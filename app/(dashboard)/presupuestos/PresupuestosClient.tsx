@@ -12,8 +12,10 @@ import type { ResumenPresupuestos } from '@/lib/supabase/types'
 type PresupuestoConRelaciones = Presupuesto & {
   arquitectos: { nombre: string; apellido: string | null; estudio: string | null } | null
   clientes:    { nombre: string; apellido: string | null; razon_social: string | null } | null
+  obras:       { id: string; nombre: string } | null
 }
 
+type ObraSlim       = { id: string; nombre: string; arquitecto_id: string; cliente_id: string | null }
 type ArquitectoSlim = Pick<Arquitecto, 'id' | 'nombre' | 'apellido' | 'estudio'>
 type ClienteSlim    = Pick<Cliente,    'id' | 'nombre' | 'apellido' | 'razon_social'>
 type ProductoSlim   = Pick<Producto,   'id' | 'nombre' | 'unidad_medida' | 'precio_venta'>
@@ -22,6 +24,7 @@ type Props = {
   presupuestos: PresupuestoConRelaciones[]
   totalFilas:   number | null
   resumen:      NoNulo<ResumenPresupuestos>
+  obras:        ObraSlim[]
   arquitectos:  ArquitectoSlim[]
   clientes:     ClienteSlim[]
   productos:    ProductoSlim[]
@@ -69,7 +72,7 @@ function clienteLabel(c: { nombre: string; apellido: string | null; razon_social
   return [c.nombre, c.apellido].filter(Boolean).join(' ')
 }
 
-export default function PresupuestosClient({ presupuestos: initial, totalFilas, resumen, arquitectos, clientes, productos }: Props) {
+export default function PresupuestosClient({ presupuestos: initial, totalFilas, resumen, obras, arquitectos, clientes, productos }: Props) {
   const aviso = avisoListadoParcial(initial.length, totalFilas)
   const router = useRouter()
   const [accionError, setAccionError] = useState<string | null>(null)
@@ -88,7 +91,7 @@ export default function PresupuestosClient({ presupuestos: initial, totalFilas, 
     const matchEstado  = filtro === 'TODOS' || p.estado === filtro
     const matchBusqueda = busqueda === '' ||
       p.numero.toLowerCase().includes(busqueda.toLowerCase()) ||
-      (p.obra ?? '').toLowerCase().includes(busqueda.toLowerCase()) ||
+      (p.obras?.nombre ?? '').toLowerCase().includes(busqueda.toLowerCase()) ||
       arquitectoLabel(p.arquitectos).toLowerCase().includes(busqueda.toLowerCase()) ||
       clienteLabel(p.clientes).toLowerCase().includes(busqueda.toLowerCase())
     return matchEstado && matchBusqueda
@@ -230,7 +233,7 @@ export default function PresupuestosClient({ presupuestos: initial, totalFilas, 
                       <td className="table-td font-medium text-gray-900">{arquitectoLabel(p.arquitectos)}</td>
                       <td className="table-td text-gray-600 text-sm">
                         {clienteLabel(p.clientes)}
-                        {p.obra && <span className="block text-xs text-gray-400">{p.obra}</span>}
+                        {p.obras?.nombre && <span className="block text-xs text-gray-400">{p.obras.nombre}</span>}
                       </td>
                       <td className="table-td text-right font-semibold">{formatCurrency(p.total)}</td>
                       <td className="table-td">
@@ -300,6 +303,7 @@ export default function PresupuestosClient({ presupuestos: initial, totalFilas, 
       {/* Modal nuevo presupuesto */}
       {showModal && (
         <PresupuestoModal
+          obras={obras}
           arquitectos={arquitectos}
           clientes={clientes}
           productos={productos}

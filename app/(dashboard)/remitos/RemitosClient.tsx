@@ -16,6 +16,7 @@ type RemitoConRelaciones = Remito & {
 
 type ClienteSlim = { id: string; nombre: string; apellido: string | null; razon_social: string | null }
 type FacturaSlim = { id: string; numero: string; cliente_id: string; total: number }
+type ProductoSlim = { id: string; nombre: string; unidad_medida: string; precio_venta: number }
 
 type Props = {
   remitos:       RemitoConRelaciones[]
@@ -23,6 +24,7 @@ type Props = {
   resumen:       NoNulo<ResumenRemitos>
   clientes:      ClienteSlim[]
   facturasVenta: FacturaSlim[]
+  productos:     ProductoSlim[]
 }
 
 type Filtro = 'TODOS' | 'PENDIENTE' | 'ENTREGADO' | 'CANCELADO'
@@ -44,7 +46,7 @@ function clienteLabel(c: { nombre: string; apellido: string | null; razon_social
   return [c.nombre, c.apellido].filter(Boolean).join(' ')
 }
 
-export default function RemitosClient({ remitos, totalFilas, resumen, clientes, facturasVenta }: Props) {
+export default function RemitosClient({ remitos, totalFilas, resumen, clientes, facturasVenta, productos }: Props) {
   const aviso = avisoListadoParcial(remitos.length, totalFilas)
   const router = useRouter()
   const [accionError, setAccionError] = useState<string | null>(null)
@@ -276,6 +278,7 @@ export default function RemitosClient({ remitos, totalFilas, resumen, clientes, 
         <RemitoModal
           clientes={clientes}
           facturasVenta={facturasVenta}
+          productos={productos}
           onSaved={onSaved}
           onClose={() => setShowModal(false)}
         />
