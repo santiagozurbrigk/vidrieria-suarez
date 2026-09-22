@@ -8,6 +8,7 @@ export default async function PresupuestosPage() {
   const [
     { data: presupuestos, count },
     { data: resumen },
+    { data: obras },
     { data: arquitectos },
     { data: clientes },
     { data: productos },
@@ -17,12 +18,19 @@ export default async function PresupuestosPage() {
       .select(`
         *,
         arquitectos(nombre, apellido, estudio),
-        clientes(nombre, apellido, razon_social)
+        clientes(nombre, apellido, razon_social),
+        obras(id, nombre)
       `, { count: 'exact' })
       .order('fecha', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(LIMITE_LISTADO),
     supabase.from('v_resumen_presupuestos').select('*').single(),
+    supabase
+      .from('obras')
+      .select('id, nombre, arquitecto_id, cliente_id')
+      .eq('activo', true)
+      .order('nombre')
+      .limit(LIMITE_LISTADO),
     supabase
       .from('arquitectos')
       .select('id, nombre, apellido, estudio')
@@ -48,6 +56,7 @@ export default async function PresupuestosPage() {
         cantidad: 0, total: 0, borradores: 0, enviados: 0,
         aprobados: 0, rechazados: 0, convertidos: 0,
       })}
+      obras={obras ?? []}
       arquitectos={arquitectos ?? []}
       clientes={clientes ?? []}
       productos={productos ?? []}

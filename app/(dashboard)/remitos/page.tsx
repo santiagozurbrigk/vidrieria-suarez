@@ -10,6 +10,7 @@ export default async function RemitosPage() {
     { data: resumen },
     { data: clientes },
     { data: facturasVenta },
+    { data: productos },
   ] = await Promise.all([
     supabase
       .from('remitos')
@@ -28,6 +29,12 @@ export default async function RemitosPage() {
       .select('id, numero, cliente_id, total')
       .order('fecha', { ascending: false })
       .limit(LIMITE_LISTADO),
+    supabase
+      .from('productos')
+      .select('id, nombre, unidad_medida, precio_venta')
+      .eq('activo', true)
+      .order('nombre')
+      .limit(LIMITE_LISTADO),
   ])
 
   return (
@@ -37,6 +44,7 @@ export default async function RemitosPage() {
       resumen={conCeros(resumen, { cantidad: 0, pendientes: 0, entregados: 0, cancelados: 0 })}
       clientes={clientes ?? []}
       facturasVenta={facturasVenta ?? []}
+      productos={productos ?? []}
     />
   )
 }

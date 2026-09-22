@@ -16,6 +16,7 @@ export default async function ImprimirRemitoPage({ params }: { params: Promise<{
     .select(`
       *,
       clientes(nombre, apellido, razon_social, cuit, telefono, email, direccion),
+      remito_items(id, descripcion, cantidad, precio_unitario, subtotal, productos(unidad_medida)),
       facturas_venta(
         numero, fecha, total,
         factura_venta_items(id, cantidad, precio_unitario, subtotal, productos(nombre, unidad_medida))
@@ -27,12 +28,35 @@ export default async function ImprimirRemitoPage({ params }: { params: Promise<{
   if (!remito) notFound()
 
   type Cli  = { nombre: string; apellido: string | null; razon_social: string | null; cuit: string | null; telefono: string | null; email: string | null; direccion: string | null }
-  type Item = { id: string; cantidad: number; precio_unitario: number; subtotal: number; productos: { nombre: string; unidad_medida: string } | null }
-  type Fac  = { numero: string; fecha: string; total: number; factura_venta_items: Item[] }
+  type ItemFactura = { id: string; cantidad: number; precio_unitario: number; subtotal: number; productos: { nombre: string; unidad_medida: string } | null }
+  type ItemRemito  = { id: string; descripcion: string; cantidad: number; precio_unitario: number; subtotal: number; productos: { unidad_medida: string } | null }
+  type Fac  = { numero: string; fecha: string; total: number; factura_venta_items: ItemFactura[] }
 
-  const cli    = remito.clientes      as Cli | null
-  const fac    = remito.facturas_venta as Fac | null
-  const items  = fac?.factura_venta_items ?? []
+  const cli = remito.clientes       as Cli | null
+  const fac = remito.facturas_venta as Fac | null
+
+  // El detalle propio del remito manda. Si no tiene, se cae al de la factura
+  // vinculada, que es como funcionaba antes de que el remito tuviera ítems.
+  const propios = (remito.remito_items as ItemRemito[] | null) ?? []
+  const items = propios.length > 0
+    ? propios.map((i) => ({
+        id: i.id,
+        descripcion: i.descripcion,
+        unidad: i.productos?.unidad_medida ?? '',
+        cantidad: i.cantidad,
+        precio_unitario: i.precio_unitario,
+        subtotal: i.subtotal,
+      }))
+    : (fac?.factura_venta_items ?? []).map((i) => ({
+        id: i.id,
+        descripcion: i.productos?.nombre ?? '—',
+        unidad: i.productos?.unidad_medida ?? '',
+        cantidad: i.cantidad,
+        precio_unitario: i.precio_unitario,
+        subtotal: i.subtotal,
+      }))
+
+  const totalItems = items.reduce((s, i) => s + i.subtotal, 0)
 
   const cliLabel = cli ? (cli.razon_social ?? [cli.nombre, cli.apellido].filter(Boolean).join(' ')) : '—'
 
@@ -102,7 +126,7 @@ export default async function ImprimirRemitoPage({ params }: { params: Promise<{
           </div>
         )}
 
-        {/* Tabla de ítems (de la factura vinculada) */}
+        {/* Detalle: el propio del remito, o el de la factura vinculada */}
         {items.length > 0 ? (
           <>
             <div style={{ fontSize:'11px', fontWeight:700, color:'#6b7280', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'10px' }}>
@@ -120,20 +144,28 @@ export default async function ImprimirRemitoPage({ params }: { params: Promise<{
               <tbody>
                 {items.map((item) => (
                   <tr key={item.id} style={{ borderBottom:'1px solid #f3f4f6' }}>
-                    <td style={{ padding:'9px 12px', fontWeight:500 }}>{item.productos?.nombre ?? '—'}</td>
+                    <td style={{ padding:'9px 12px', fontWeight:500 }}>{item.descripcion}</td>
                     <td style={{ padding:'9px 12px', textAlign:'right', color:'#374151' }}>
-                      {item.cantidad} {item.productos ? (UNIDADES[item.productos.unidad_medida] ?? item.productos.unidad_medida) : ''}
+                      {item.cantidad} {item.unidad ? (UNIDADES[item.unidad] ?? item.unidad) : ''}
                     </td>
                     <td style={{ padding:'9px 12px', textAlign:'right', color:'#374151' }}>{formatCurrency(item.precio_unitario)}</td>
                     <td style={{ padding:'9px 12px', textAlign:'right', fontWeight:600 }}>{formatCurrency(item.subtotal)}</td>
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={3} style={{ padding:'10px 12px', textAlign:'right', fontWeight:700, borderTop:'2px solid #e5e7eb' }}>Total</td>
+                  <td style={{ padding:'10px 12px', textAlign:'right', fontWeight:700, color:'#1d4ed8', borderTop:'2px solid #e5e7eb' }}>
+                    {formatCurrency(totalItems)}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </>
         ) : (
           <div style={{ padding:'20px', background:'#f9fafb', borderRadius:'6px', textAlign:'center', color:'#9ca3af', fontSize:'13px', marginBottom:'24px' }}>
-            Sin detalle de ítems — remito sin factura vinculada
+            Sin detalle de ítems
           </div>
         )}
 

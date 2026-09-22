@@ -14,6 +14,7 @@ export default async function ImprimirPresupuestoPage({ params }: { params: Prom
     .select(`
       *,
       arquitectos(nombre, apellido, estudio, telefono, email),
+      obras(nombre, direccion),
       clientes(nombre, apellido, razon_social, cuit, condicion_iva, telefono, email, direccion),
       presupuesto_items(id, descripcion, cantidad, precio_unitario, subtotal, productos(nombre))
     `)
@@ -26,7 +27,10 @@ export default async function ImprimirPresupuestoPage({ params }: { params: Prom
   type Cli  = { nombre: string; apellido: string | null; razon_social: string | null; cuit: string | null; condicion_iva: string | null; telefono: string | null; email: string | null; direccion: string | null }
   type Item = { id: string; descripcion: string; cantidad: number; precio_unitario: number; subtotal: number; productos: { nombre: string } | null }
 
+  type Obr  = { nombre: string; direccion: string | null }
+
   const arq   = pres.arquitectos as Arq | null
+  const obra  = pres.obras       as Obr | null
   const cli   = pres.clientes   as Cli | null
   const items = (pres.presupuesto_items as Item[]) ?? []
 
@@ -85,7 +89,7 @@ export default async function ImprimirPresupuestoPage({ params }: { params: Prom
             {arq?.telefono && <div style={{ color:'#374151', fontSize:'12px' }}>Tel: {arq.telefono}</div>}
             {arq?.email    && <div style={{ color:'#374151', fontSize:'12px' }}>{arq.email}</div>}
           </div>
-          {(cli || pres.obra) && (
+          {(cli || obra) && (
             <div>
               <div style={{ fontSize:'11px', fontWeight:700, color:'#6b7280', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'8px' }}>Cliente / Obra</div>
               {cliLabel && <div style={{ fontWeight:600 }}>{cliLabel}</div>}
@@ -93,9 +97,9 @@ export default async function ImprimirPresupuestoPage({ params }: { params: Prom
               {cli?.telefono && <div style={{ color:'#374151', fontSize:'12px' }}>Tel: {cli.telefono}</div>}
               {cli?.email    && <div style={{ color:'#374151', fontSize:'12px' }}>{cli.email}</div>}
               {cli?.direccion && <div style={{ color:'#374151', fontSize:'12px' }}>{cli.direccion}</div>}
-              {pres.obra && (
+              {obra && (
                 <div style={{ marginTop:'4px', padding:'4px 8px', background:'#f3f4f6', borderRadius:'4px', fontSize:'12px' }}>
-                  Obra: <strong>{pres.obra}</strong>
+                  Obra: <strong>{obra.nombre}</strong>
                 </div>
               )}
             </div>

@@ -62,7 +62,7 @@ export default async function DashboardPage() {
     // Presupuestos abiertos
     supabase
       .from('presupuestos')
-      .select('id, numero, fecha, total, estado, obra, arquitectos(nombre, apellido, estudio)')
+      .select('id, numero, fecha, total, estado, obras(nombre), arquitectos(nombre, apellido, estudio)')
       .in('estado', ['BORRADOR', 'ENVIADO', 'APROBADO'])
       .order('fecha', { ascending: false }),
     // Clientes activos
@@ -78,6 +78,10 @@ export default async function DashboardPage() {
     if (!c) return '—'
     if (c.razon_social) return c.razon_social
     return [c.nombre, c.apellido].filter(Boolean).join(' ')
+  }
+
+  function obraNombre(o: { nombre: string } | null) {
+    return o?.nombre ?? null
   }
 
   function arquitectoLabel(a: { nombre: string; apellido: string | null; estudio: string | null } | null) {
@@ -190,7 +194,9 @@ export default async function DashboardPage() {
                     <div className="min-w-0">
                       <span className="font-mono text-xs text-gray-500 mr-2">{p.numero}</span>
                       <span className="font-medium text-gray-900 truncate">{arquitectoLabel(arq)}</span>
-                      {p.obra && <span className="text-xs text-gray-400 ml-1">· {p.obra}</span>}
+                      {obraNombre(p.obras) && (
+                        <span className="text-xs text-gray-400 ml-1">· {obraNombre(p.obras)}</span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 ml-2 shrink-0">
                       <span className="font-semibold text-gray-900">{formatCurrency(p.total)}</span>

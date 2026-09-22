@@ -16,6 +16,7 @@ const navItems = [
   { href: '/remitos',      label: 'Remitos',        icon: '🚚' },
   { href: '/clientes',     label: 'Clientes',       icon: '👥' },
   { href: '/arquitectos',  label: 'Arquitectos',    icon: '📐' },
+  { href: '/obras',        label: 'Obras',          icon: '🏗️' },
   { href: '/pagos',        label: 'Pagos',          icon: '💳' },
   { href: '/caja',         label: 'Caja',           icon: '💰' },
   { href: '/gastos',       label: 'Gastos',         icon: '📋' },

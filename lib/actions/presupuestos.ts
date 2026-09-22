@@ -20,7 +20,7 @@ const itemSchema = z.object({
 const presupuestoSchema = z.object({
   arquitecto_id: z.string().uuid('Seleccioná un arquitecto'),
   cliente_id:    z.string().uuid().nullable().optional(),
-  obra:          textoOpcional,
+  obra_id:       z.string().uuid().nullable().optional(),
   numero:        textoOpcional,
   fecha:         fechaISO,
   validez_dias:  z.coerce.number().int().positive().default(30),
@@ -38,7 +38,7 @@ export async function crearPresupuesto(payload: unknown): Promise<Resultado<Pres
       p_fecha:         data.fecha,
       p_items:         data.items,
       p_cliente_id:    data.cliente_id ?? undefined,
-      p_obra:          data.obra ?? undefined,
+      p_obra_id:       data.obra_id ?? undefined,
       p_validez_dias:  data.validez_dias,
       p_notas:         data.notas ?? undefined,
       // Omitido ⇒ la base asigna el siguiente número correlativo.

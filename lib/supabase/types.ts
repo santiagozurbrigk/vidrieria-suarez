@@ -672,6 +672,57 @@ export type Database = {
           },
         ]
       }
+      obras: {
+        Row: {
+          activo: boolean
+          arquitecto_id: string
+          cliente_id: string | null
+          created_at: string
+          direccion: string | null
+          id: string
+          nombre: string
+          notas: string | null
+          updated_at: string
+        }
+        Insert: {
+          activo?: boolean
+          arquitecto_id: string
+          cliente_id?: string | null
+          created_at?: string
+          direccion?: string | null
+          id?: string
+          nombre: string
+          notas?: string | null
+          updated_at?: string
+        }
+        Update: {
+          activo?: boolean
+          arquitecto_id?: string
+          cliente_id?: string | null
+          created_at?: string
+          direccion?: string | null
+          id?: string
+          nombre?: string
+          notas?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "obras_arquitecto_id_fkey"
+            columns: ["arquitecto_id"]
+            isOneToOne: false
+            referencedRelation: "arquitectos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "obras_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pago_facturas: {
         Row: {
           created_at: string
@@ -849,7 +900,7 @@ export type Database = {
           id: string
           notas: string | null
           numero: string
-          obra: string | null
+          obra_id: string | null
           total: number
           updated_at: string
           validez_dias: number
@@ -865,7 +916,7 @@ export type Database = {
           id?: string
           notas?: string | null
           numero: string
-          obra?: string | null
+          obra_id?: string | null
           total?: number
           updated_at?: string
           validez_dias?: number
@@ -881,7 +932,7 @@ export type Database = {
           id?: string
           notas?: string | null
           numero?: string
-          obra?: string | null
+          obra_id?: string | null
           total?: number
           updated_at?: string
           validez_dias?: number
@@ -913,6 +964,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "presupuestos_obra_id_fkey"
+            columns: ["obra_id"]
+            isOneToOne: false
+            referencedRelation: "obras"
             referencedColumns: ["id"]
           },
         ]
@@ -1043,6 +1101,61 @@ export type Database = {
         }
         Relationships: []
       }
+      remito_items: {
+        Row: {
+          cantidad: number
+          created_at: string
+          descripcion: string
+          id: string
+          precio_unitario: number
+          producto_id: string | null
+          remito_id: string
+          subtotal: number
+        }
+        Insert: {
+          cantidad: number
+          created_at?: string
+          descripcion: string
+          id?: string
+          precio_unitario?: number
+          producto_id?: string | null
+          remito_id: string
+          subtotal?: number
+        }
+        Update: {
+          cantidad?: number
+          created_at?: string
+          descripcion?: string
+          id?: string
+          precio_unitario?: number
+          producto_id?: string | null
+          remito_id?: string
+          subtotal?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "remito_items_producto_id_fkey"
+            columns: ["producto_id"]
+            isOneToOne: false
+            referencedRelation: "productos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "remito_items_producto_id_fkey"
+            columns: ["producto_id"]
+            isOneToOne: false
+            referencedRelation: "v_productos_bajo_minimo"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "remito_items_remito_id_fkey"
+            columns: ["remito_id"]
+            isOneToOne: false
+            referencedRelation: "remitos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       remitos: {
         Row: {
           archivo_adjunto_path: string | null
@@ -1055,6 +1168,7 @@ export type Database = {
           id: string
           notas: string | null
           numero: string
+          total: number
         }
         Insert: {
           archivo_adjunto_path?: string | null
@@ -1067,6 +1181,7 @@ export type Database = {
           id?: string
           notas?: string | null
           numero: string
+          total?: number
         }
         Update: {
           archivo_adjunto_path?: string | null
@@ -1079,6 +1194,7 @@ export type Database = {
           id?: string
           notas?: string | null
           numero?: string
+          total?: number
         }
         Relationships: [
           {
@@ -1347,7 +1463,7 @@ export type Database = {
           p_items: Json
           p_notas?: string
           p_numero?: string
-          p_obra?: string
+          p_obra_id?: string
           p_validez_dias?: number
         }
         Returns: {
@@ -1361,7 +1477,7 @@ export type Database = {
           id: string
           notas: string | null
           numero: string
-          obra: string | null
+          obra_id: string | null
           total: number
           updated_at: string
           validez_dias: number
@@ -1378,6 +1494,7 @@ export type Database = {
           p_cliente_id: string
           p_factura_venta_id?: string
           p_fecha: string
+          p_items?: Json
           p_notas?: string
           p_numero?: string
         }
@@ -1392,6 +1509,7 @@ export type Database = {
           id: string
           notas: string | null
           numero: string
+          total: number
         }
         SetofOptions: {
           from: "*"
@@ -1639,6 +1757,7 @@ export type FacturaCompraItem = Tables<'factura_compra_items'>
 export type Cliente           = Tables<'clientes'>
 export type FacturaVenta      = Tables<'facturas_venta'>
 export type Arquitecto        = Tables<'arquitectos'>
+export type Obra              = Tables<'obras'>
 export type Presupuesto       = Tables<'presupuestos'>
 export type MovimientoCaja    = Tables<'movimientos_caja'>
 export type CategoriaGasto    = Tables<'categorias_gasto'>
@@ -1647,6 +1766,7 @@ export type Pago              = Tables<'pagos'>
 export type PagoFactura       = Tables<'pago_facturas'>
 export type CierreCaja        = Tables<'cierres_caja'>
 export type Remito            = Tables<'remitos'>
+export type RemitoItem        = Tables<'remito_items'>
 
 export type ResumenVentas         = Views<'v_resumen_ventas'>
 export type ResumenCompras        = Views<'v_resumen_compras'>

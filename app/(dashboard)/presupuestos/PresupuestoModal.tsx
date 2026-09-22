@@ -17,7 +17,10 @@ type ArquitectoSlim = Pick<Arquitecto, 'id' | 'nombre' | 'apellido' | 'estudio'>
 type ClienteSlim    = Pick<Cliente,    'id' | 'nombre' | 'apellido' | 'razon_social'>
 type ProductoSlim   = Pick<Producto,   'id' | 'nombre' | 'unidad_medida' | 'precio_venta'>
 
+type ObraSlim = { id: string; nombre: string; arquitecto_id: string; cliente_id: string | null }
+
 type Props = {
+  obras:       ObraSlim[]
   arquitectos: ArquitectoSlim[]
   clientes:    ClienteSlim[]
   productos:   ProductoSlim[]
@@ -39,10 +42,10 @@ function clienteLabel(c: ClienteSlim) {
   return [c.nombre, c.apellido].filter(Boolean).join(' ')
 }
 
-export default function PresupuestoModal({ arquitectos, clientes, productos, onSaved, onClose }: Props) {
+export default function PresupuestoModal({ obras, arquitectos, clientes, productos, onSaved, onClose }: Props) {
   const [arquitectoId, setArquitectoId] = useState('')
   const [clienteId, setClienteId]       = useState('')
-  const [obra, setObra]                 = useState('')
+  const [obraId, setObraId]             = useState('')
   const [numero, setNumero]             = useState('')
   const [fecha, setFecha]               = useState(hoy())
   const [validezDias, setValidezDias]   = useState(30)
@@ -106,7 +109,7 @@ export default function PresupuestoModal({ arquitectos, clientes, productos, onS
     const r = await crearPresupuesto({
       arquitecto_id: arquitectoId,
       cliente_id:    clienteId || null,
-      obra:          obra || null,
+      obra_id:       obraId || null,
       // Vacío ⇒ la base asigna el siguiente número correlativo.
       numero, fecha,
       validez_dias:  validezDias,
@@ -119,6 +122,20 @@ export default function PresupuestoModal({ arquitectos, clientes, productos, onS
   }
 
   const productosDisponibles = productos.filter((p) => !items.find((x) => x.producto_id === p.id))
+
+  /**
+   * El arquitecto y el cliente son atributos de la obra, así que elegirla los
+   * completa. El arquitecto queda bloqueado: la base lo impone igual, y verlo
+   * editable acá haría creer que se puede presupuestar una obra a nombre de
+   * otro arquitecto.
+   */
+  function elegirObra(id: string) {
+    setObraId(id)
+    const o = obras.find((x) => x.id === id)
+    if (!o) return
+    setArquitectoId(o.arquitecto_id)
+    if (o.cliente_id) setClienteId(o.cliente_id)
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -134,12 +151,16 @@ export default function PresupuestoModal({ arquitectos, clientes, productos, onS
 
             {/* Arquitecto */}
             <div>
-              <label className="label">Arquitecto *</label>
+              <label className="label">
+                Arquitecto *
+                {obraId && <span className="ml-1 font-normal text-gray-400">(lo define la obra)</span>}
+              </label>
               <select
                 value={arquitectoId}
                 onChange={(e) => setArquitectoId(e.target.value)}
                 required
-                className="input"
+                disabled={!!obraId}
+                className="input disabled:bg-gray-50 disabled:text-gray-500"
               >
                 <option value="">— Seleccionar arquitecto —</option>
                 {arquitectos.map((a) => (
@@ -164,13 +185,18 @@ export default function PresupuestoModal({ arquitectos, clientes, productos, onS
                 </select>
               </div>
               <div>
-                <label className="label">Obra / proyecto</label>
-                <input
-                  value={obra}
-                  onChange={(e) => setObra(e.target.value)}
-                  className="input"
-                  placeholder="Nombre del proyecto"
-                />
+                <label className="label">Obra</label>
+                <select value={obraId} onChange={(e) => elegirObra(e.target.value)} className="input">
+                  <option value="">— Sin obra —</option>
+                  {obras.map((o) => (
+                    <option key={o.id} value={o.id}>{o.nombre}</option>
+                  ))}
+                </select>
+                {obras.length === 0 && (
+                  <p className="mt-1 text-xs text-amber-600">
+                    No hay obras cargadas. Creá una en la sección Obras.
+                  </p>
+                )}
               </div>
             </div>
 
