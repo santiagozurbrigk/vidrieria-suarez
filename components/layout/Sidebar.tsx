@@ -12,7 +12,6 @@ const navItems = [
   { href: '/proveedores',  label: 'Proveedores',    icon: '🏭' },
   { href: '/compras',      label: 'Compras',         icon: '🛒' },
   { href: '/precios',      label: 'Lista de Precios', icon: '💲' },
-  { href: '/ventas',        label: 'Ventas',          icon: '🧾' },
   { href: '/presupuestos', label: 'Presupuestos',   icon: '📄' },
   { href: '/remitos',      label: 'Remitos',        icon: '🚚' },
   { href: '/clientes',     label: 'Clientes',       icon: '👥' },

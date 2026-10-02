@@ -116,7 +116,7 @@ export async function convertirPresupuestoEnFactura(
     if (error) throw error
 
     revalidatePath('/presupuestos')
-    revalidatePath('/ventas')
+    revalidatePath('/caja')
     revalidatePath('/stock')
     revalidatePath('/')
     return factura

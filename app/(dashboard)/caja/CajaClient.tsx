@@ -4,6 +4,9 @@ import { useState } from 'react'
 import type { MovimientoCaja, CierreCaja } from '@/lib/supabase/types'
 import AjusteModal from './AjusteModal'
 import CierreModal from './CierreModal'
+import MovimientoModal from './MovimientoModal'
+import GraficosCaja from './GraficosCaja'
+import { LABEL_CATEGORIA } from '@/lib/caja'
 import { useRouter } from 'next/navigation'
 import { avisoListadoParcial } from '@/lib/paginacion'
 
@@ -15,6 +18,14 @@ type Props = {
   movimientos: MovimientoCaja[]
   totalFilas:  number | null
   cierres:     CierreCaja[]
+  porDia:       { dia: string; ingresos: number; egresos: number; neto: number }[]
+  porSemana:    { semana: string; ingresos: number; egresos: number; neto: number }[]
+  porMes:       { mes: string; ingresos: number; egresos: number; neto: number }[]
+  porCategoria: { categoria: string; total: number }[]
+  productos:      { id: string; nombre: string; unidad_medida: string; precio_venta: number; stock_actual: number }[]
+  clientes:       { id: string; nombre: string; apellido: string | null; razon_social: string | null }[]
+  proveedores:    { id: string; razon_social: string }[]
+  facturasCompra: { id: string; numero: string; fecha: string; total: number; saldo_pendiente: number; proveedor_id: string }[]
 }
 
 function formatCurrency(n: number) {
@@ -25,7 +36,11 @@ function formatFecha(d: string) {
   return new Date(d).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
 }
 
-export default function CajaClient({ saldo, movimientos: initial, totalFilas, cierres: initialCierres }: Props) {
+export default function CajaClient({
+  saldo, movimientos: initial, totalFilas, cierres: initialCierres,
+  porDia, porSemana, porMes, porCategoria,
+  productos, clientes, proveedores, facturasCompra,
+}: Props) {
   const aviso = avisoListadoParcial(initial.length, totalFilas)
   const router = useRouter()
   const [tab, setTab]           = useState<'movimientos' | 'cierres'>('movimientos')
@@ -33,6 +48,7 @@ export default function CajaClient({ saldo, movimientos: initial, totalFilas, ci
   const [busqueda, setBusqueda] = useState('')
   const [showAjuste, setShowAjuste] = useState(false)
   const [showCierre, setShowCierre] = useState(false)
+  const [showMovimiento, setShowMovimiento] = useState(false)
 
   const filtrados = initial.filter((m) => {
     const matchTipo     = filtro === 'TODOS' || m.tipo === filtro
@@ -61,16 +77,20 @@ export default function CajaClient({ saldo, movimientos: initial, totalFilas, ci
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Caja</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Movimientos generados automáticamente por pagos y gastos, más ajustes manuales.
+            <p className="mt-1 text-sm text-gray-500">
+              Todo lo que entra y sale se carga acá: ventas del local, otros ingresos y
+              egresos. Los egresos además aparecen en Gastos.
             </p>
           </div>
-          <div className="flex gap-2 shrink-0">
-            <button onClick={() => setShowAjuste(true)} className="btn-secondary">
-              ↕ Ajuste manual
+          <div className="flex shrink-0 gap-2">
+            <button onClick={() => setShowCierre(true)} className="btn-secondary">
+              Cierre del día
             </button>
-            <button onClick={() => setShowCierre(true)} className="btn-primary">
-              Registrar cierre
+            <button onClick={() => setShowAjuste(true)} className="btn-secondary">
+              ↕ Ajuste
+            </button>
+            <button onClick={() => setShowMovimiento(true)} className="btn-primary">
+              + Nuevo movimiento
             </button>
           </div>
         </div>
@@ -98,6 +118,13 @@ export default function CajaClient({ saldo, movimientos: initial, totalFilas, ci
             <p className="mt-1 text-2xl font-bold text-red-600">{formatCurrency(saldo.total_egresos)}</p>
           </div>
         </div>
+
+        <GraficosCaja
+          porDia={porDia}
+          porSemana={porSemana}
+          porMes={porMes}
+          porCategoria={porCategoria}
+        />
 
         {/* Tabs */}
         <div className="mb-4 flex border-b border-gray-200">
@@ -155,6 +182,7 @@ export default function CajaClient({ saldo, movimientos: initial, totalFilas, ci
                       <th className="table-th">Fecha</th>
                       <th className="table-th">Tipo</th>
                       <th className="table-th">Concepto</th>
+                      <th className="table-th">Categoría</th>
                       <th className="table-th">Medio</th>
                       <th className="table-th text-right">Monto</th>
                     </tr>
@@ -169,7 +197,12 @@ export default function CajaClient({ saldo, movimientos: initial, totalFilas, ci
                           </span>
                         </td>
                         <td className="table-td font-medium text-gray-900">{m.concepto}</td>
-                        <td className="table-td text-gray-500 text-sm">{m.medio_pago ?? '—'}</td>
+                        <td className="table-td text-sm text-gray-500">
+                          {m.categoria_egreso
+                            ? LABEL_CATEGORIA[m.categoria_egreso] ?? m.categoria_egreso
+                            : '—'}
+                        </td>
+                        <td className="table-td text-sm text-gray-500">{m.medio_pago ?? '—'}</td>
                         <td className={`table-td text-right font-semibold ${
                           m.tipo === 'INGRESO' ? 'text-green-600' : m.tipo === 'EGRESO' ? 'text-red-600' : 'text-gray-600'
                         }`}>
@@ -179,7 +212,7 @@ export default function CajaClient({ saldo, movimientos: initial, totalFilas, ci
                     ))}
                     {filtrados.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="py-12 text-center text-sm text-gray-400">
+                        <td colSpan={6} className="py-12 text-center text-sm text-gray-400">
                           No hay movimientos.
                         </td>
                       </tr>
@@ -244,8 +277,21 @@ export default function CajaClient({ saldo, movimientos: initial, totalFilas, ci
         )}
       </div>
 
+      {showMovimiento && (
+        <MovimientoModal
+          productos={productos}
+          clientes={clientes}
+          proveedores={proveedores}
+          facturasCompra={facturasCompra}
+          onSaved={() => { setShowMovimiento(false); onSaved() }}
+          onClose={() => setShowMovimiento(false)}
+        />
+      )}
       {showAjuste && (
-        <AjusteModal onSaved={onSaved} onClose={() => setShowAjuste(false)} />
+        <AjusteModal
+          onSaved={() => { setShowAjuste(false); onSaved() }}
+          onClose={() => setShowAjuste(false)}
+        />
       )}
       {showCierre && (
         <CierreModal

@@ -4,9 +4,9 @@ import { useState } from 'react'
 import { registrarAjusteCaja } from '@/lib/actions/caja'
 import { hoy } from '@/lib/fechas'
 
-type Tipo = 'INGRESO' | 'EGRESO' | 'AJUSTE'
-
-const MEDIOS_PAGO = ['Efectivo', 'Transferencia', 'Cheque', 'Tarjeta débito', 'Tarjeta crédito', 'Otro']
+// Este modal queda sólo para el ajuste por diferencia de conteo. Los ingresos y
+// egresos se cargan desde "+ Nuevo movimiento", que les pide categoría: un egreso
+// sin categoría aparecería como "Sin categoría" en Gastos.
 
 type Props = {
   onSaved: () => void
@@ -14,10 +14,8 @@ type Props = {
 }
 
 export default function AjusteModal({ onSaved, onClose }: Props) {
-  const [tipo, setTipo]         = useState<Tipo>('INGRESO')
   const [concepto, setConcepto] = useState('')
   const [monto, setMonto]       = useState<number | ''>('')
-  const [medioPago, setMedioPago] = useState('Efectivo')
   const [fecha, setFecha]       = useState(hoy())
   const [notas, setNotas]       = useState('')
   const [loading, setLoading]   = useState(false)
@@ -31,9 +29,10 @@ export default function AjusteModal({ onSaved, onClose }: Props) {
 
     setLoading(true)
     const r = await registrarAjusteCaja({
-      tipo, concepto: concepto.trim(),
+      tipo: 'AJUSTE',
+      concepto: concepto.trim(),
       monto: typeof monto === 'number' ? monto : parseFloat(monto),
-      medio_pago: tipo === 'AJUSTE' ? null : medioPago,
+      medio_pago: null,
       fecha,
       notas: notas || null,
     })
@@ -46,33 +45,14 @@ export default function AjusteModal({ onSaved, onClose }: Props) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl">
         <div className="p-6 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-900">Ajuste manual de caja</h2>
+          <h2 className="text-lg font-bold text-gray-900">Ajuste de caja</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Sólo para corregir una diferencia de conteo. Para cargar una venta o un
+            gasto usá <strong>+ Nuevo movimiento</strong>.
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Tipo */}
-          <div>
-            <label className="label">Tipo *</label>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
-              {(['INGRESO', 'EGRESO', 'AJUSTE'] as Tipo[]).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setTipo(t)}
-                  className={`flex-1 py-2 font-medium transition-colors ${
-                    tipo === t
-                      ? t === 'INGRESO' ? 'bg-green-600 text-white'
-                        : t === 'EGRESO' ? 'bg-red-600 text-white'
-                        : 'bg-gray-700 text-white'
-                      : 'bg-white text-gray-500 hover:bg-gray-50'
-                  }`}
-                >
-                  {t === 'INGRESO' ? '↑ Ingreso' : t === 'EGRESO' ? '↓ Egreso' : '↕ Ajuste'}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Concepto */}
           <div>
             <label className="label">Concepto *</label>
@@ -81,11 +61,7 @@ export default function AjusteModal({ onSaved, onClose }: Props) {
               onChange={(e) => setConcepto(e.target.value)}
               required
               className="input"
-              placeholder={
-                tipo === 'INGRESO' ? 'Aporte de capital, venta en efectivo...'
-                : tipo === 'EGRESO' ? 'Retiro de caja, compra urgente...'
-                : 'Ajuste por diferencia de inventario...'
-              }
+              placeholder="Diferencia de conteo del cierre…"
             />
           </div>
 
@@ -113,16 +89,6 @@ export default function AjusteModal({ onSaved, onClose }: Props) {
               />
             </div>
           </div>
-
-          {/* Medio de pago (no aplica para AJUSTE) */}
-          {tipo !== 'AJUSTE' && (
-            <div>
-              <label className="label">Medio de pago</label>
-              <select value={medioPago} onChange={(e) => setMedioPago(e.target.value)} className="input">
-                {MEDIOS_PAGO.map((m) => <option key={m} value={m}>{m}</option>)}
-              </select>
-            </div>
-          )}
 
           {/* Notas */}
           <div>
