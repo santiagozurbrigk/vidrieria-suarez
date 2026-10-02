@@ -1,4 +1,4 @@
-# Vidriería Suárez — Sistema de gestión interno
+# Aberturas SP — Sistema de gestión interno
 
 Aplicación web interna para gestionar stock, compras, ventas, presupuestos,
 cuenta corriente, caja y gastos.

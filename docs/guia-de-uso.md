@@ -82,7 +82,7 @@ Menú de la izquierda → **🏭 Proveedores** → botón **+ Nuevo proveedor**.
 
 Son **dos campos separados** en la ficha del proveedor:
 
-- **Alias CBU** → el alias, tipo `vidrios.suarez.mp`
+- **Alias CBU** → el alias, tipo `aberturas.sp.mp`
 - **CBU** → los 22 números
 
 Antes la lista mostraba sólo el alias, y si cargabas el CBU parecía que no se

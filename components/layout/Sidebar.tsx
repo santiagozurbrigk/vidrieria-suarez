@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { NEGOCIO } from '@/lib/negocio'
 import { useRouter } from 'next/navigation'
 
 const navItems = [
@@ -41,8 +42,7 @@ export default function Sidebar({ userName }: { userName: string }) {
           🪟
         </div>
         <div>
-          <p className="text-sm font-semibold text-white leading-tight">Vidriería</p>
-          <p className="text-xs text-gray-400">Suárez</p>
+          <p className="text-sm font-semibold leading-tight text-white">{NEGOCIO.nombre}</p>
         </div>
       </div>
 

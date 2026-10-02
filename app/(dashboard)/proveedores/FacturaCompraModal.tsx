@@ -35,6 +35,12 @@ function redondear(n: number) {
   return Math.round(n * 100) / 100
 }
 
+// Cuánto de un importe que YA incluye IVA corresponde al impuesto.
+// Con 21%: el neto es total / 1.21, y el IVA es la diferencia.
+function ivaContenido(totalConIva: number, tasa: number) {
+  return redondear(totalConIva - totalConIva / (1 + tasa / 100))
+}
+
 function normalizar(texto: string) {
   return texto
     .toLowerCase()
@@ -74,13 +80,9 @@ function matchProduct(
 export default function FacturaCompraModal({ proveedor, productos, onSaved, onClose }: Props) {
   const [items, setItems] = useState<Item[]>([])
   const [iva, setIva] = useState(0)
-  // En la mayoría de los comprobantes que entran acá (factura B, C, ticket) los
-  // precios de los renglones ya traen el IVA adentro. Sumarle el IVA de nuevo
-  // inflaba el total, así que el modo arranca en "incluido" y la factura A, que
-  // discrimina IVA, se marca aparte.
-  const [ivaIncluido, setIvaIncluido] = useState(true)
-  // Total impreso en el comprobante, según la IA. Sólo para contrastar.
-  const [totalLeido, setTotalLeido] = useState<number | null>(null)
+  // Total de la factura, tal como está impreso: ya trae el IVA adentro.
+  // En null, se usa la suma de los renglones (carga manual sin escanear).
+  const [totalManual, setTotalManual] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -98,18 +100,20 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // `sumaRenglones` es lo que está impreso en el detalle del comprobante.
-  // De ahí se deriva el resto según si esos importes traen IVA o no, de forma
-  // que siempre valga subtotal + iva = total, que es lo que espera la base.
-  const sumaRenglones = items.reduce((s, i) => s + i.subtotal, 0)
-  const total    = ivaIncluido ? sumaRenglones : sumaRenglones + iva
+  // El total manda y ya incluye IVA: es el importe final impreso en la factura.
+  // El IVA se discrimina hacia adentro (no se suma encima), así que el neto es
+  // el total menos el IVA y siempre vale subtotal + iva = total, que es lo que
+  // esperan las columnas de la factura.
+  const sumaRenglones = redondear(items.reduce((s, i) => s + i.subtotal, 0))
+  const total    = totalManual ?? sumaRenglones
   const subtotal = redondear(total - iva)
 
-  // Si la IA leyó el total impreso y no coincide con el calculado, casi siempre
-  // es porque el modo de IVA está al revés.
-  const descuadre =
-    totalLeido != null && Math.abs(totalLeido - total) > 0.5
-      ? redondear(total - totalLeido)
+  // El total impreso puede no dar igual que la suma de los renglones (un
+  // descuento global, un redondeo, un renglón que no se leyó). Manda el total,
+  // pero conviene avisarlo.
+  const difRenglones =
+    totalManual != null && Math.abs(totalManual - sumaRenglones) > 0.5
+      ? redondear(totalManual - sumaRenglones)
       : null
 
   // ── Extracción IA + auto-población de ítems ──────────────────────────────
@@ -147,9 +151,8 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
     if (data.tipo_comprobante) setTipoComprobante(data.tipo_comprobante)
     if (data.iva != null) setIva(data.iva)
     if (data.notas) setNotas(data.notas)
-    setTotalLeido(data.total)
-    // Si la IA pudo determinarlo, le creemos; si no, se deja el modo actual.
-    if (data.precios_con_iva != null) setIvaIncluido(data.precios_con_iva)
+    // El total de la factura es el que manda: se toma tal cual está impreso.
+    if (data.total != null) setTotalManual(data.total)
 
     // Auto-poblar ítems: detectados → tabla directamente
     autoPopularItems(data.items ?? [])
@@ -254,10 +257,10 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
       return
     }
 
-    // Con IVA incluido, el neto sale de restarlo del total: un IVA mayor al
-    // total daría un neto negativo.
-    if (ivaIncluido && iva > sumaRenglones) {
-      setError('El IVA no puede ser mayor que la suma de los renglones. Si el IVA va aparte, destildá la opción.')
+    if (total <= 0) { setError('El total de la factura tiene que ser mayor a cero.'); return }
+    // El IVA se descuenta del total: uno mayor al total daría un neto negativo.
+    if (iva > total) {
+      setError('El IVA no puede ser mayor que el total de la factura.')
       return
     }
 
@@ -493,68 +496,93 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
 
             {/* ── Totales ── */}
             <div className="flex justify-end">
-              <div className="w-72 space-y-2 text-sm">
-                <div className="rounded-lg bg-gray-50 px-3 py-2">
-                  <label className="flex cursor-pointer items-start gap-2">
-                    <input
-                      type="checkbox"
-                      checked={ivaIncluido}
-                      onChange={(e) => setIvaIncluido(e.target.checked)}
-                      className="mt-0.5"
-                    />
-                    <span className="text-xs text-gray-700">
-                      Los importes de los renglones <strong>ya incluyen IVA</strong>
-                      <span className="mt-0.5 block text-gray-500">
-                        {ivaIncluido
-                          ? 'El IVA no se suma de nuevo: ya está dentro del total.'
-                          : 'El IVA se suma aparte para llegar al total (factura A).'}
-                      </span>
-                    </span>
-                  </label>
+              <div className="w-80 space-y-2 text-sm">
+                <div className="flex items-center justify-between text-gray-500">
+                  <span className="text-xs">Suma de los renglones</span>
+                  <span className="text-xs">{formatCurrency(sumaRenglones)}</span>
                 </div>
 
-                <div className="flex justify-between text-gray-600">
-                  <span>Suma de renglones</span>
-                  <span>{formatCurrency(sumaRenglones)}</span>
-                </div>
-                <div className="flex items-center justify-between text-gray-600">
+                <div className="flex items-center justify-between font-semibold text-gray-900">
                   <span>
-                    IVA
-                    <span className="block text-xs text-gray-400">
-                      {ivaIncluido ? 'contenido en el total' : 'se suma al total'}
+                    Total de la factura *
+                    <span className="block text-xs font-normal text-gray-400">
+                      el importe final impreso, con IVA incluido
                     </span>
                   </span>
                   <input
                     type="number" step="0.01" min="0"
-                    value={iva}
-                    onChange={(e) => setIva(parseFloat(e.target.value) || 0)}
-                    className="input w-28 text-right text-sm"
+                    value={totalManual ?? sumaRenglones}
+                    onChange={(e) => setTotalManual(parseFloat(e.target.value) || 0)}
+                    className="input w-32 text-right text-sm font-semibold"
                   />
                 </div>
-                <div className="flex justify-between text-xs text-gray-500">
+
+                {totalManual != null && (
+                  <button
+                    type="button"
+                    onClick={() => setTotalManual(null)}
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    Usar la suma de los renglones
+                  </button>
+                )}
+
+                {difRenglones != null && (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Los renglones suman {formatCurrency(Math.abs(difRenglones))}{' '}
+                    {difRenglones > 0 ? 'menos' : 'más'} que el total de la factura.
+                    Vale el total; revisá los renglones si no esperabas la diferencia.
+                  </p>
+                )}
+
+                <div className="space-y-1 border-t pt-2">
+                  <div className="flex items-center justify-between text-gray-600">
+                    <span>
+                      IVA
+                      <span className="block text-xs text-gray-400">
+                        cuánto de ese total es IVA
+                      </span>
+                    </span>
+                    <input
+                      type="number" step="0.01" min="0"
+                      value={iva}
+                      onChange={(e) => setIva(parseFloat(e.target.value) || 0)}
+                      className="input w-32 text-right text-sm"
+                    />
+                  </div>
+                  <div className="flex items-center justify-end gap-2 text-xs">
+                    <span className="text-gray-400">Calcular:</span>
+                    {[21, 10.5].map((tasa) => (
+                      <button
+                        key={tasa}
+                        type="button"
+                        onClick={() => setIva(ivaContenido(total, tasa))}
+                        className="rounded border border-gray-200 px-2 py-0.5 text-gray-600 hover:bg-gray-50"
+                      >
+                        {tasa}%
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setIva(0)}
+                      className="rounded border border-gray-200 px-2 py-0.5 text-gray-600 hover:bg-gray-50"
+                    >
+                      Sin IVA
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-between border-t pt-2 text-gray-600">
                   <span>Neto (sin IVA)</span>
                   <span>{formatCurrency(subtotal)}</span>
                 </div>
-                <div className="flex justify-between border-t pt-2 font-bold text-gray-900">
+                <div className="flex justify-between text-lg font-bold text-gray-900">
                   <span>Total</span>
                   <span>{formatCurrency(total)}</span>
                 </div>
-
-                {totalLeido != null && (
-                  <div className="flex justify-between text-xs text-gray-400">
-                    <span>Total impreso en el comprobante</span>
-                    <span>{formatCurrency(totalLeido)}</span>
-                  </div>
-                )}
-                {descuadre != null && (
-                  <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                    El total calculado difiere en {formatCurrency(Math.abs(descuadre))} del
-                    que figura en el comprobante.{' '}
-                    {descuadre > 0
-                      ? 'Suele pasar cuando el IVA se está sumando dos veces: probá marcar que los renglones ya lo incluyen.'
-                      : 'Revisá los renglones y el importe de IVA.'}
-                  </p>
-                )}
+                <p className="text-right text-xs text-gray-400">
+                  El IVA no se suma: ya está dentro del total.
+                </p>
               </div>
             </div>
 
