@@ -5,16 +5,74 @@ No hace falta saber nada técnico: son las pantallas de siempre, con cosas nueva
 
 Resumen de lo nuevo:
 
-1. [Proveedores: dónde se cargan y el Alias / CBU](#1-proveedores)
-2. [Facturas de compra: cargan el stock solas](#2-facturas-de-compra)
-3. [Remitos: poner el monto a mano](#3-remitos)
-4. [Obras: asignarle un arquitecto](#4-obras)
-5. [Presupuestos: hacerlos sobre una obra](#5-presupuestos)
-6. [Stock: ajustar para arriba **y para abajo**](#6-ajustar-el-stock)
+1. [**Vender en el local**: qué hacer en el sistema](#1-vender-en-el-local)
+2. [Proveedores: dónde se cargan y el Alias / CBU](#2-proveedores)
+3. [Facturas de compra: cargan el stock solas](#3-facturas-de-compra)
+4. [Remitos: poner el monto a mano](#4-remitos)
+5. [Obras: asignarle un arquitecto](#5-obras)
+6. [Presupuestos: hacerlos sobre una obra](#6-presupuestos)
+7. [Stock: ajustar para arriba **y para abajo**](#7-ajustar-el-stock)
 
 ---
 
-## 1. Proveedores
+## 1. Vender en el local
+
+**Toda venta se registra en el mismo lugar: 🧾 Ventas.** No importa si fue en el
+local, por teléfono o a un cliente de siempre.
+
+Son **dos pasos**: primero la factura, después el cobro.
+
+### Paso 1 — Cargar la venta
+
+Menú → **🧾 Ventas** → **+ Nueva factura**.
+
+1. **Cliente.** Si es alguien que compra en el local y no hace falta ficharlo,
+   apretá **Venta de mostrador**: la venta queda a nombre de *Consumidor Final*
+   y no tenés que cargar una ficha nueva por cada persona.
+   Si es un cliente que ya tenés cargado, elegilo de la lista.
+2. **Tipo.** *Factura* o *Ticket*, según lo que le des.
+3. **Agregá los productos.** El precio sale de la lista, y lo podés cambiar.
+4. Guardá.
+
+Al guardar, el sistema **descuenta el stock solo**. La factura queda en estado
+**Pendiente**: la mercadería salió, pero la plata todavía no está registrada.
+
+### Paso 2 — Cobrar
+
+En la lista de ventas, en la fila de esa factura, apretá el botón verde
+**Cobrar**. Poné el monto y el medio de pago (efectivo, transferencia, tarjeta…)
+y confirmá.
+
+Recién ahí **la plata entra a 💰 Caja**, sola. No hace falta cargar nada en Caja
+a mano.
+
+| Estado de la factura | Qué significa |
+|---|---|
+| **Pendiente** | Se entregó la mercadería, no se cobró nada todavía |
+| **Parcial** | Pagó una parte, queda saldo |
+| **Pagada** | Está cobrada por completo |
+
+### Si te pagan todo en el momento (lo habitual en el local)
+
+Hacés los dos pasos uno atrás del otro: cargás la factura y le das **Cobrar** por
+el total. Queda **Pagada**, el stock bajó y la plata está en Caja.
+
+> **¿Por qué dos pasos y no uno?** Porque muchas ventas no se cobran al toque:
+> se entrega y se cobra después, o se cobra en cuotas. Separarlo es lo que te
+> permite ver en todo momento cuánto te deben, en el cuadro **Por cobrar**.
+
+### Lo que NO hay que usar para una venta
+
+| No uses… | Porque… |
+|---|---|
+| **💰 Caja** a mano | El cobro ya genera el movimiento solo. Si lo cargás aparte, la plata queda contada dos veces |
+| **🚚 Remitos** | El remito es el comprobante de entrega y **no descuenta stock ni registra plata** |
+| **📄 Presupuestos** | Es lo que le pasás antes de que te confirme |
+| **📦 Stock → Movimiento** | Es para ajustes y roturas, no para ventas. La venta ya descuenta el stock |
+
+---
+
+## 2. Proveedores
 
 ### Dónde se cargan
 
@@ -36,7 +94,7 @@ había guardado. **Ya está arreglado**: la columna de la lista ahora se llama
 
 ---
 
-## 2. Facturas de compra
+## 3. Facturas de compra
 
 Las facturas de compra son las que **suman stock automáticamente**.
 
@@ -71,9 +129,32 @@ Tenés dos caminos:
 En los dos casos, al guardar la factura **el stock de cada producto sube solo**.
 No hay que cargar el movimiento de stock aparte.
 
+### El IVA (esto cambió)
+
+**Antes el total salía inflado**: el sistema sumaba los renglones y encima le
+sumaba el IVA otra vez, cuando en la mayoría de las facturas el IVA ya viene
+adentro de los precios. **Ya está arreglado.**
+
+Abajo de los totales hay una casilla:
+
+> ☑ **Los importes de los renglones ya incluyen IVA**
+
+| Si la factura es… | La casilla va… | Porque… |
+|---|---|---|
+| **B, C** o un **ticket** | **Tildada** (viene así) | Los precios que figuran ya tienen el IVA adentro |
+| **A** (con el IVA discriminado aparte) | **Destildada** | Los renglones son netos y el IVA se suma para llegar al total |
+
+Cuando escaneás la factura, el sistema **se da cuenta solo** y deja la casilla
+como corresponde. Igual conviene mirarla.
+
+**Cómo saber si quedó bien:** abajo del total aparece el **total impreso en el
+comprobante**, o sea lo que dice el papel. Los dos números tienen que coincidir.
+Si no coinciden, el sistema te avisa en un cartel amarillo y te dice qué revisar
+— casi siempre es la casilla del IVA al revés.
+
 ---
 
-## 3. Remitos
+## 4. Remitos
 
 ### El cambio
 
@@ -105,7 +186,7 @@ El subtotal y el total se recalculan solos a medida que escribís.
 
 ---
 
-## 4. Obras
+## 5. Obras
 
 Es una sección **nueva**. Una obra es el trabajo concreto —una casa, un edificio,
 un local— y **cada obra tiene su arquitecto**.
@@ -146,7 +227,7 @@ Si te equivocaste, el botón pasa a decir **Reactivar** y la volvés a habilitar
 
 ---
 
-## 5. Presupuestos
+## 6. Presupuestos
 
 Menú → **📄 Presupuestos** → **+ Nuevo presupuesto**.
 
@@ -170,7 +251,7 @@ Nada de lo viejo se rompe.
 
 ---
 
-## 6. Ajustar el stock
+## 7. Ajustar el stock
 
 Menú → **📦 Stock** → en la fila del producto, botón **Movimiento**.
 
@@ -235,3 +316,15 @@ presupuesto (poné *— Sin obra —*) y elegí el arquitecto a mano.
 
 **Puse mal un ajuste de stock.**
 Hacé otro ajuste con el número correcto. El último ajuste manda.
+
+**El total de una factura de compra no coincide con el papel.**
+Mirá la casilla *Los importes de los renglones ya incluyen IVA*. Si el total
+calculado te da más que el impreso, el IVA se está sumando dos veces: tildala.
+
+**Vendí en el local y la plata no aparece en Caja.**
+Falta el segundo paso: apretá **Cobrar** en la fila de esa factura. La plata
+entra a Caja cuando registrás el cobro, no cuando creás la factura.
+
+**No quiero cargar una ficha de cliente por cada venta del local.**
+No hace falta. En la factura de venta apretá **Venta de mostrador** y va contra
+la ficha *Consumidor Final*.

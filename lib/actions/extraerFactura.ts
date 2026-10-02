@@ -24,6 +24,10 @@ const facturaExtraidaSchema = z.object({
   subtotal:         z.number().nullable(),
   iva:              z.number().nullable(),
   total:            z.number().nullable(),
+  // true  = los importes de los renglones YA incluyen IVA (facturas B/C, tickets)
+  // false = son netos y el IVA va aparte (factura A)
+  // null  = no se pudo determinar
+  precios_con_iva:  z.boolean().nullable(),
   notas:            z.string().nullable(),
 })
 
@@ -53,12 +57,16 @@ const ESQUEMA_SALIDA = {
         additionalProperties: false,
       },
     },
-    subtotal: { type: ['number', 'null'] },
-    iva:      { type: ['number', 'null'] },
-    total:    { type: ['number', 'null'] },
-    notas:    { type: ['string', 'null'] },
+    subtotal:        { type: ['number', 'null'] },
+    iva:             { type: ['number', 'null'] },
+    total:           { type: ['number', 'null'] },
+    precios_con_iva: { type: ['boolean', 'null'] },
+    notas:           { type: ['string', 'null'] },
   },
-  required: ['numero', 'fecha', 'tipo_comprobante', 'items', 'subtotal', 'iva', 'total', 'notas'],
+  required: [
+    'numero', 'fecha', 'tipo_comprobante', 'items',
+    'subtotal', 'iva', 'total', 'precios_con_iva', 'notas',
+  ],
   additionalProperties: false,
 } as const
 
@@ -74,7 +82,23 @@ Reglas:
 - La fecha va en formato YYYY-MM-DD (año-mes-día).
 - Los montos son números, sin símbolo de moneda ni separadores de miles.
 - Si hay descuentos, reflejalos en el subtotal de cada ítem.
-- En tipo_comprobante elegí el que mejor describa el documento.`
+- En tipo_comprobante elegí el que mejor describa el documento.
+
+IVA (importante, es donde más se suele errar):
+- Transcribí el importe de cada renglón TAL COMO ESTÁ IMPRESO. No le sumes ni
+  le restes IVA, y no lo recalcules.
+- "total" es el importe final a pagar que figura en el comprobante.
+- "iva" es el importe de IVA discriminado en el comprobante, en pesos. Si el
+  comprobante no lo discrimina, devolvé null; no lo estimes ni lo calcules vos.
+- "precios_con_iva" dice si los importes de los renglones ya tienen el IVA
+  adentro:
+    * true  si la suma de los renglones da el total final (caso típico de
+      factura B, factura C, ticket y presupuesto a consumidor final).
+    * false si los renglones son netos y el IVA se suma aparte para llegar al
+      total (caso típico de factura A, donde el IVA va discriminado).
+    * null  si no se puede determinar con el documento a la vista.
+  Para decidirlo, sumá los renglones y comparalo con el total impreso: si
+  coinciden, los precios ya incluyen IVA.`
 
 /**
  * Extrae los datos de una factura a partir de una foto o un PDF.

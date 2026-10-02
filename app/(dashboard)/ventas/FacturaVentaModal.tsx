@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { Cliente, Producto } from '@/lib/supabase/types'
 import { registrarFacturaVenta } from '@/lib/actions/ventas'
+import { obtenerOCrearConsumidorFinal } from '@/lib/actions/clientes'
 import { hoy } from '@/lib/fechas'
 
 type Item = {
@@ -46,6 +47,9 @@ export default function FacturaVentaModal({ clientes, productos, onSaved, onClos
   const [notas, setNotas]       = useState('')
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState<string | null>(null)
+  // Ficha genérica para la venta de mostrador: se busca o se crea al tocarla.
+  const [mostrador, setMostrador] = useState<ClienteSlim | null>(null)
+  const [buscandoMostrador, setBuscandoMostrador] = useState(false)
 
   const subtotal = items.reduce((s, i) => s + i.subtotal, 0)
   const total    = subtotal + iva
@@ -84,6 +88,22 @@ export default function FacturaVentaModal({ clientes, productos, onSaved, onClos
   }
 
   // ── Submit ─────────────────────────────────────────────────────────────────
+  /**
+   * Usa el cliente "Consumidor Final" para una venta de mostrador.
+   *
+   * La factura necesita un cliente, pero a quien compra en el local no hace
+   * falta ficharlo: todas esas ventas van contra la misma ficha genérica.
+   */
+  async function usarMostrador() {
+    setError(null)
+    setBuscandoMostrador(true)
+    const r = await obtenerOCrearConsumidorFinal()
+    setBuscandoMostrador(false)
+    if (!r.ok) { setError(r.error); return }
+    setMostrador(r.data)
+    setClienteId(r.data.id)
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
@@ -130,7 +150,17 @@ export default function FacturaVentaModal({ clientes, productos, onSaved, onClos
 
             {/* Cliente */}
             <div>
-              <label className="label">Cliente *</label>
+              <div className="flex items-baseline justify-between">
+                <label className="label">Cliente *</label>
+                <button
+                  type="button"
+                  onClick={usarMostrador}
+                  disabled={buscandoMostrador}
+                  className="text-xs text-blue-600 hover:underline disabled:opacity-50"
+                >
+                  {buscandoMostrador ? 'Buscando…' : 'Venta de mostrador'}
+                </button>
+              </div>
               <select
                 value={clienteId}
                 onChange={(e) => setClienteId(e.target.value)}
@@ -138,10 +168,18 @@ export default function FacturaVentaModal({ clientes, productos, onSaved, onClos
                 className="input"
               >
                 <option value="">— Seleccionar cliente —</option>
+                {mostrador && !clientes.some((c) => c.id === mostrador.id) && (
+                  <option value={mostrador.id}>{clienteLabel(mostrador)}</option>
+                )}
                 {clientes.map((c) => (
                   <option key={c.id} value={c.id}>{clienteLabel(c)}</option>
                 ))}
               </select>
+              <p className="mt-1 text-xs text-gray-400">
+                Si la venta es en el local y no hace falta fichar a quien compra,
+                usá <strong>Venta de mostrador</strong>: va contra la ficha
+                &ldquo;Consumidor Final&rdquo;.
+              </p>
             </div>
 
             {/* Cabecera */}

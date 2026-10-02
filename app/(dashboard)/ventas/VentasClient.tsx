@@ -104,8 +104,9 @@ export default function VentasClient({ facturas: initial, totalFilas, resumen, c
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Facturas de venta</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Registrá ventas a clientes. El stock se descuenta automáticamente.
+            <p className="mt-1 text-sm text-gray-500">
+              Toda venta se registra acá, también la del local. Al crear la factura
+              se descuenta el stock; la plata entra a Caja cuando registrás el cobro.
             </p>
           </div>
           <button onClick={() => setShowModal(true)} className="btn-primary shrink-0">
@@ -200,6 +201,7 @@ export default function VentasClient({ facturas: initial, totalFilas, resumen, c
                   <th className="table-th text-right">Total</th>
                   <th className="table-th text-right">Saldo pendiente</th>
                   <th className="table-th">Estado</th>
+                  <th className="table-th"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -228,10 +230,20 @@ export default function VentasClient({ facturas: initial, totalFilas, resumen, c
                             {ESTADO_LABEL[f.estado] ?? f.estado}
                           </span>
                         </td>
+                        <td className="table-td text-right">
+                          {f.estado !== 'PAGADA' && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setCobroFactura(f) }}
+                              className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
+                            >
+                              Cobrar
+                            </button>
+                          )}
+                        </td>
                       </tr>
                       {isExpanded && (
                         <tr key={`${f.id}-items`} className="bg-blue-50">
-                          <td colSpan={7} className="px-8 py-3">
+                          <td colSpan={8} className="px-8 py-3">
                             {items.length > 0 && (
                               <table className="w-full text-sm mb-3">
                                 <thead>
@@ -290,7 +302,7 @@ export default function VentasClient({ facturas: initial, totalFilas, resumen, c
                 })}
                 {filtradas.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-sm text-gray-400">
+                    <td colSpan={8} className="py-12 text-center text-sm text-gray-400">
                       No hay facturas {filtro !== 'TODAS' ? `en estado "${ESTADO_LABEL[filtro]}"` : ''}.
                     </td>
                   </tr>

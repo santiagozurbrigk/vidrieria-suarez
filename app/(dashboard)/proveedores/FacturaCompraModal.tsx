@@ -29,6 +29,12 @@ function formatCurrency(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 }
 
+// Los importes van a columnas numeric(12,2): se redondea acá para que el total
+// guardado sea exactamente subtotal + iva y no quede un centavo de diferencia.
+function redondear(n: number) {
+  return Math.round(n * 100) / 100
+}
+
 function normalizar(texto: string) {
   return texto
     .toLowerCase()
@@ -68,6 +74,13 @@ function matchProduct(
 export default function FacturaCompraModal({ proveedor, productos, onSaved, onClose }: Props) {
   const [items, setItems] = useState<Item[]>([])
   const [iva, setIva] = useState(0)
+  // En la mayoría de los comprobantes que entran acá (factura B, C, ticket) los
+  // precios de los renglones ya traen el IVA adentro. Sumarle el IVA de nuevo
+  // inflaba el total, así que el modo arranca en "incluido" y la factura A, que
+  // discrimina IVA, se marca aparte.
+  const [ivaIncluido, setIvaIncluido] = useState(true)
+  // Total impreso en el comprobante, según la IA. Sólo para contrastar.
+  const [totalLeido, setTotalLeido] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -85,8 +98,19 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const subtotal = items.reduce((s, i) => s + i.subtotal, 0)
-  const total = subtotal + iva
+  // `sumaRenglones` es lo que está impreso en el detalle del comprobante.
+  // De ahí se deriva el resto según si esos importes traen IVA o no, de forma
+  // que siempre valga subtotal + iva = total, que es lo que espera la base.
+  const sumaRenglones = items.reduce((s, i) => s + i.subtotal, 0)
+  const total    = ivaIncluido ? sumaRenglones : sumaRenglones + iva
+  const subtotal = redondear(total - iva)
+
+  // Si la IA leyó el total impreso y no coincide con el calculado, casi siempre
+  // es porque el modo de IVA está al revés.
+  const descuadre =
+    totalLeido != null && Math.abs(totalLeido - total) > 0.5
+      ? redondear(total - totalLeido)
+      : null
 
   // ── Extracción IA + auto-población de ítems ──────────────────────────────
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -123,6 +147,9 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
     if (data.tipo_comprobante) setTipoComprobante(data.tipo_comprobante)
     if (data.iva != null) setIva(data.iva)
     if (data.notas) setNotas(data.notas)
+    setTotalLeido(data.total)
+    // Si la IA pudo determinarlo, le creemos; si no, se deja el modo actual.
+    if (data.precios_con_iva != null) setIvaIncluido(data.precios_con_iva)
 
     // Auto-poblar ítems: detectados → tabla directamente
     autoPopularItems(data.items ?? [])
@@ -224,6 +251,13 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
     const nuevosSinNombre = items.filter((x) => x.isNew && !x.nombre.trim())
     if (nuevosSinNombre.length > 0) {
       setError('Completá el nombre de los productos nuevos (marcados con 🆕).')
+      return
+    }
+
+    // Con IVA incluido, el neto sale de restarlo del total: un IVA mayor al
+    // total daría un neto negativo.
+    if (ivaIncluido && iva > sumaRenglones) {
+      setError('El IVA no puede ser mayor que la suma de los renglones. Si el IVA va aparte, destildá la opción.')
       return
     }
 
@@ -459,13 +493,37 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
 
             {/* ── Totales ── */}
             <div className="flex justify-end">
-              <div className="w-56 space-y-2 text-sm">
-                <div className="flex justify-between text-gray-600">
-                  <span>Subtotal</span>
-                  <span>{formatCurrency(subtotal)}</span>
+              <div className="w-72 space-y-2 text-sm">
+                <div className="rounded-lg bg-gray-50 px-3 py-2">
+                  <label className="flex cursor-pointer items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={ivaIncluido}
+                      onChange={(e) => setIvaIncluido(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span className="text-xs text-gray-700">
+                      Los importes de los renglones <strong>ya incluyen IVA</strong>
+                      <span className="mt-0.5 block text-gray-500">
+                        {ivaIncluido
+                          ? 'El IVA no se suma de nuevo: ya está dentro del total.'
+                          : 'El IVA se suma aparte para llegar al total (factura A).'}
+                      </span>
+                    </span>
+                  </label>
                 </div>
-                <div className="flex justify-between items-center text-gray-600">
-                  <span>IVA</span>
+
+                <div className="flex justify-between text-gray-600">
+                  <span>Suma de renglones</span>
+                  <span>{formatCurrency(sumaRenglones)}</span>
+                </div>
+                <div className="flex items-center justify-between text-gray-600">
+                  <span>
+                    IVA
+                    <span className="block text-xs text-gray-400">
+                      {ivaIncluido ? 'contenido en el total' : 'se suma al total'}
+                    </span>
+                  </span>
                   <input
                     type="number" step="0.01" min="0"
                     value={iva}
@@ -473,10 +531,30 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
                     className="input w-28 text-right text-sm"
                   />
                 </div>
-                <div className="flex justify-between font-bold text-gray-900 border-t pt-2">
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>Neto (sin IVA)</span>
+                  <span>{formatCurrency(subtotal)}</span>
+                </div>
+                <div className="flex justify-between border-t pt-2 font-bold text-gray-900">
                   <span>Total</span>
                   <span>{formatCurrency(total)}</span>
                 </div>
+
+                {totalLeido != null && (
+                  <div className="flex justify-between text-xs text-gray-400">
+                    <span>Total impreso en el comprobante</span>
+                    <span>{formatCurrency(totalLeido)}</span>
+                  </div>
+                )}
+                {descuadre != null && (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    El total calculado difiere en {formatCurrency(Math.abs(descuadre))} del
+                    que figura en el comprobante.{' '}
+                    {descuadre > 0
+                      ? 'Suele pasar cuando el IVA se está sumando dos veces: probá marcar que los renglones ya lo incluyen.'
+                      : 'Revisá los renglones y el importe de IVA.'}
+                  </p>
+                )}
               </div>
             </div>
 
