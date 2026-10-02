@@ -5,10 +5,9 @@ import { z } from 'zod'
 import { conUsuario } from '@/lib/supabase/server'
 import { ejecutar, type Resultado } from '@/lib/resultado'
 import { fechaISO, montoPositivo, parsear, textoOpcional, textoRequerido } from '@/lib/validacion'
-import type { Gasto } from '@/lib/supabase/types'
 
 const gastoSchema = z.object({
-  categoria_id: z.string().uuid('Elegí una categoría'),
+  categoria_egreso: z.enum(['PROVEEDOR', 'SERVICIO', 'RETIRO', 'VARIOS', 'VEHICULOS', 'COMBUSTIBLE']),
   concepto:     textoRequerido('El concepto es obligatorio'),
   monto:        montoPositivo,
   medio_pago:   textoOpcional,
@@ -16,28 +15,12 @@ const gastoSchema = z.object({
   notas:        textoOpcional,
 })
 
+// No hay registrarGasto: los egresos se cargan desde Caja, que llama a
+// registrar_egreso_caja para que la plata y la categoría queden en un solo lugar.
 function revalidar() {
   revalidatePath('/gastos')
   revalidatePath('/caja')
   revalidatePath('/')
-}
-
-export async function registrarGasto(payload: unknown): Promise<Resultado<Gasto>> {
-  return ejecutar(async () => {
-    const data = parsear(gastoSchema, payload)
-    const { supabase, user } = await conUsuario()
-
-    // El trigger fn_caja_por_gasto genera el movimiento de EGRESO.
-    const { data: gasto, error } = await supabase
-      .from('gastos')
-      .insert({ ...data, usuario_id: user.id })
-      .select()
-      .single()
-    if (error) throw error
-
-    revalidar()
-    return gasto
-  })
 }
 
 export async function editarGasto(id: string, payload: unknown): Promise<Resultado> {
@@ -48,7 +31,7 @@ export async function editarGasto(id: string, payload: unknown): Promise<Resulta
     const { error } = await supabase
       .from('gastos')
       .update({
-        categoria_id: data.categoria_id,
+        categoria_egreso: data.categoria_egreso,
         concepto:     data.concepto,
         monto:        data.monto,
         medio_pago:   data.medio_pago,
@@ -64,10 +47,11 @@ export async function editarGasto(id: string, payload: unknown): Promise<Resulta
       .update({
         // El trigger fn_caja_por_gasto copia el concepto tal cual, sin prefijo:
         // agregarle uno acá dejaba la caja con un texto distinto al del gasto.
-        concepto:   data.concepto,
-        monto:      data.monto,
-        medio_pago: data.medio_pago,
-        fecha:      data.fecha,
+        concepto:         data.concepto,
+        monto:            data.monto,
+        medio_pago:       data.medio_pago,
+        fecha:            data.fecha,
+        categoria_egreso: data.categoria_egreso,
       })
       .eq('gasto_id', id)
     if (errorCaja) throw errorCaja

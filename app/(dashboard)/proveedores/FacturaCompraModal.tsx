@@ -29,6 +29,18 @@ function formatCurrency(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 }
 
+// Los importes van a columnas numeric(12,2): se redondea acá para que el total
+// guardado sea exactamente subtotal + iva y no quede un centavo de diferencia.
+function redondear(n: number) {
+  return Math.round(n * 100) / 100
+}
+
+// Cuánto de un importe que YA incluye IVA corresponde al impuesto.
+// Con 21%: el neto es total / 1.21, y el IVA es la diferencia.
+function ivaContenido(totalConIva: number, tasa: number) {
+  return redondear(totalConIva - totalConIva / (1 + tasa / 100))
+}
+
 function normalizar(texto: string) {
   return texto
     .toLowerCase()
@@ -68,6 +80,9 @@ function matchProduct(
 export default function FacturaCompraModal({ proveedor, productos, onSaved, onClose }: Props) {
   const [items, setItems] = useState<Item[]>([])
   const [iva, setIva] = useState(0)
+  // Total de la factura, tal como está impreso: ya trae el IVA adentro.
+  // En null, se usa la suma de los renglones (carga manual sin escanear).
+  const [totalManual, setTotalManual] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -85,8 +100,21 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const subtotal = items.reduce((s, i) => s + i.subtotal, 0)
-  const total = subtotal + iva
+  // El total manda y ya incluye IVA: es el importe final impreso en la factura.
+  // El IVA se discrimina hacia adentro (no se suma encima), así que el neto es
+  // el total menos el IVA y siempre vale subtotal + iva = total, que es lo que
+  // esperan las columnas de la factura.
+  const sumaRenglones = redondear(items.reduce((s, i) => s + i.subtotal, 0))
+  const total    = totalManual ?? sumaRenglones
+  const subtotal = redondear(total - iva)
+
+  // El total impreso puede no dar igual que la suma de los renglones (un
+  // descuento global, un redondeo, un renglón que no se leyó). Manda el total,
+  // pero conviene avisarlo.
+  const difRenglones =
+    totalManual != null && Math.abs(totalManual - sumaRenglones) > 0.5
+      ? redondear(totalManual - sumaRenglones)
+      : null
 
   // ── Extracción IA + auto-población de ítems ──────────────────────────────
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -123,6 +151,8 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
     if (data.tipo_comprobante) setTipoComprobante(data.tipo_comprobante)
     if (data.iva != null) setIva(data.iva)
     if (data.notas) setNotas(data.notas)
+    // El total de la factura es el que manda: se toma tal cual está impreso.
+    if (data.total != null) setTotalManual(data.total)
 
     // Auto-poblar ítems: detectados → tabla directamente
     autoPopularItems(data.items ?? [])
@@ -224,6 +254,13 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
     const nuevosSinNombre = items.filter((x) => x.isNew && !x.nombre.trim())
     if (nuevosSinNombre.length > 0) {
       setError('Completá el nombre de los productos nuevos (marcados con 🆕).')
+      return
+    }
+
+    if (total <= 0) { setError('El total de la factura tiene que ser mayor a cero.'); return }
+    // El IVA se descuenta del total: uno mayor al total daría un neto negativo.
+    if (iva > total) {
+      setError('El IVA no puede ser mayor que el total de la factura.')
       return
     }
 
@@ -459,24 +496,93 @@ export default function FacturaCompraModal({ proveedor, productos, onSaved, onCl
 
             {/* ── Totales ── */}
             <div className="flex justify-end">
-              <div className="w-56 space-y-2 text-sm">
-                <div className="flex justify-between text-gray-600">
-                  <span>Subtotal</span>
-                  <span>{formatCurrency(subtotal)}</span>
+              <div className="w-80 space-y-2 text-sm">
+                <div className="flex items-center justify-between text-gray-500">
+                  <span className="text-xs">Suma de los renglones</span>
+                  <span className="text-xs">{formatCurrency(sumaRenglones)}</span>
                 </div>
-                <div className="flex justify-between items-center text-gray-600">
-                  <span>IVA</span>
+
+                <div className="flex items-center justify-between font-semibold text-gray-900">
+                  <span>
+                    Total de la factura *
+                    <span className="block text-xs font-normal text-gray-400">
+                      el importe final impreso, con IVA incluido
+                    </span>
+                  </span>
                   <input
                     type="number" step="0.01" min="0"
-                    value={iva}
-                    onChange={(e) => setIva(parseFloat(e.target.value) || 0)}
-                    className="input w-28 text-right text-sm"
+                    value={totalManual ?? sumaRenglones}
+                    onChange={(e) => setTotalManual(parseFloat(e.target.value) || 0)}
+                    className="input w-32 text-right text-sm font-semibold"
                   />
                 </div>
-                <div className="flex justify-between font-bold text-gray-900 border-t pt-2">
+
+                {totalManual != null && (
+                  <button
+                    type="button"
+                    onClick={() => setTotalManual(null)}
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    Usar la suma de los renglones
+                  </button>
+                )}
+
+                {difRenglones != null && (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Los renglones suman {formatCurrency(Math.abs(difRenglones))}{' '}
+                    {difRenglones > 0 ? 'menos' : 'más'} que el total de la factura.
+                    Vale el total; revisá los renglones si no esperabas la diferencia.
+                  </p>
+                )}
+
+                <div className="space-y-1 border-t pt-2">
+                  <div className="flex items-center justify-between text-gray-600">
+                    <span>
+                      IVA
+                      <span className="block text-xs text-gray-400">
+                        cuánto de ese total es IVA
+                      </span>
+                    </span>
+                    <input
+                      type="number" step="0.01" min="0"
+                      value={iva}
+                      onChange={(e) => setIva(parseFloat(e.target.value) || 0)}
+                      className="input w-32 text-right text-sm"
+                    />
+                  </div>
+                  <div className="flex items-center justify-end gap-2 text-xs">
+                    <span className="text-gray-400">Calcular:</span>
+                    {[21, 10.5].map((tasa) => (
+                      <button
+                        key={tasa}
+                        type="button"
+                        onClick={() => setIva(ivaContenido(total, tasa))}
+                        className="rounded border border-gray-200 px-2 py-0.5 text-gray-600 hover:bg-gray-50"
+                      >
+                        {tasa}%
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setIva(0)}
+                      className="rounded border border-gray-200 px-2 py-0.5 text-gray-600 hover:bg-gray-50"
+                    >
+                      Sin IVA
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-between border-t pt-2 text-gray-600">
+                  <span>Neto (sin IVA)</span>
+                  <span>{formatCurrency(subtotal)}</span>
+                </div>
+                <div className="flex justify-between text-lg font-bold text-gray-900">
                   <span>Total</span>
                   <span>{formatCurrency(total)}</span>
                 </div>
+                <p className="text-right text-xs text-gray-400">
+                  El IVA no se suma: ya está dentro del total.
+                </p>
               </div>
             </div>
 

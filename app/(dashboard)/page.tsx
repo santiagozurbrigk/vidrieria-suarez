@@ -219,7 +219,7 @@ export default async function DashboardPage() {
         <div className="card p-4">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-gray-700">🧾 Últimas ventas</h2>
-            <Link href="/ventas" className="text-xs text-blue-600 hover:text-blue-800 font-medium">Ver todas →</Link>
+            <Link href="/caja" className="text-xs font-medium text-blue-600 hover:text-blue-800">Ver caja →</Link>
           </div>
           {(ultimasVentas?.length ?? 0) === 0 ? (
             <p className="text-sm text-gray-400">No hay ventas registradas.</p>
@@ -287,7 +287,7 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 text-center">
         {[
           { label: 'Clientes activos', value: clientesActivos ?? 0, href: '/clientes', icon: '👥' },
-          { label: 'Facturas por cobrar', value: cobrosAbiertos?.length ?? 0, href: '/ventas', icon: '📄' },
+          { label: 'Facturas por cobrar', value: cobrosAbiertos?.length ?? 0, href: '/pagos', icon: '📄' },
           { label: 'Presupuestos abiertos', value: presupuestosAbiertos?.length ?? 0, href: '/presupuestos', icon: '📋' },
           { label: 'Alertas de stock', value: bajoMinimo?.length ?? 0, href: '/stock', icon: '📦' },
         ].map((s) => (

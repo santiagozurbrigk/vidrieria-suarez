@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { NEGOCIO } from '@/lib/negocio'
 import { useRouter } from 'next/navigation'
 
 export default function LoginPage() {
@@ -34,8 +35,8 @@ export default function LoginPage() {
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600 text-3xl shadow-lg">
             🪟
           </div>
-          <h1 className="text-2xl font-bold text-white">Vidriería Suárez</h1>
-          <p className="mt-1 text-sm text-gray-400">Sistema de gestión interno</p>
+          <h1 className="text-2xl font-bold text-white">{NEGOCIO.nombre}</h1>
+          <p className="mt-1 text-sm text-gray-400">{NEGOCIO.rubro}</p>
         </div>
 
         {/* Card */}
@@ -54,7 +55,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="block w-full rounded-lg border border-gray-600 bg-gray-700 px-3 py-2.5 text-sm text-white placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="usuario@vidrieria.com"
+                placeholder="usuario@ejemplo.com"
               />
             </div>
             <div>

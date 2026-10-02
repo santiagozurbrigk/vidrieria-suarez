@@ -1,12 +1,13 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
+import { NEGOCIO } from '@/lib/negocio'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
 export const metadata: Metadata = {
-  title: 'Vidriería Suárez',
-  description: 'Sistema de gestión interno',
+  title: NEGOCIO.nombre,
+  description: NEGOCIO.rubro,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -1,5 +1,6 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
+import { NEGOCIO } from '@/lib/negocio'
 
 function formatCurrency(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
@@ -70,7 +71,7 @@ export default async function ImprimirFacturaVentaPage({ params }: { params: Pro
         {/* Encabezado empresa */}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'28px', paddingBottom:'20px', borderBottom:'2px solid #e5e7eb' }}>
           <div>
-            <div style={{ fontSize:'22px', fontWeight:800, color:'#111' }}>Vidriería Suárez</div>
+            <div style={{ fontSize:'22px', fontWeight:800, color:'#111' }}>{NEGOCIO.nombre}</div>
             <div style={{ color:'#6b7280', marginTop:'4px', fontSize:'12px' }}>{TIPO_LABEL[factura.tipo_comprobante] ?? factura.tipo_comprobante}</div>
           </div>
           <div style={{ textAlign:'right' }}>
@@ -174,7 +175,7 @@ export default async function ImprimirFacturaVentaPage({ params }: { params: Pro
 
         {/* Pie */}
         <div style={{ borderTop:'1px solid #e5e7eb', paddingTop:'16px', marginTop:'20px', textAlign:'center', color:'#9ca3af', fontSize:'11px' }}>
-          Vidriería Suárez · Gracias por su compra
+          {NEGOCIO.nombre} · Gracias por su compra
         </div>
       </div>
 

@@ -1,194 +1,201 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import type { Gasto, CategoriaGasto } from '@/lib/supabase/types'
+import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import GastoModal from './GastoModal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { eliminarGasto } from '@/lib/actions/gastos'
 import { exportarExcel } from '@/lib/exportar'
 import { nombreMes } from '@/lib/fechas'
 import { avisoListadoParcial } from '@/lib/paginacion'
-import { useRouter } from 'next/navigation'
+import { CATEGORIAS_EGRESO, LABEL_CATEGORIA } from '@/lib/caja'
 
-type GastoConCategoria = Gasto & { categorias_gasto: { nombre: string } | null }
+type Egreso = {
+  movimiento_id:    string
+  fecha:            string
+  concepto:         string
+  monto:            number
+  medio_pago:       string | null
+  categoria_egreso: string | null
+  proveedor:        string | null
+  gasto_id:         string | null
+  notas:            string | null
+  /** Sólo los gastos propios se editan acá; un pago a proveedor arrastra imputaciones. */
+  editable:         boolean
+}
 
 type Props = {
-  gastos:       GastoConCategoria[]
+  egresos:      Egreso[]
   totalFilas:   number | null
   /** Período mostrado, 'YYYY-MM'. Lo resuelve el servidor desde ?mes=. */
   mes:          string
   meses:        string[]
   totalMes:     number
-  porCategoria: { categoria_id: string | null; categoria: string; cantidad: number; total: number }[]
-  categorias:   CategoriaGasto[]
+  porCategoria: { categoria: string; total: number; cantidad: number }[]
 }
 
 function formatCurrency(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
 }
 
-const mesLabel = nombreMes
+function formatFecha(d: string) {
+  return new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+}
+
+function mesLabel(mes: string) {
+  const [anio, m] = mes.split('-').map(Number)
+  return nombreMes(anio, m)
+}
 
 export default function GastosClient({
-  gastos, totalFilas, mes, meses, totalMes, porCategoria, categorias,
+  egresos, totalFilas, mes, meses, totalMes, porCategoria,
 }: Props) {
   const router = useRouter()
-  const [deleteError, setDeleteError] = useState<string | null>(null)
-  const [showModal, setShowModal] = useState(false)
-  const [editGasto, setEditGasto] = useState<GastoConCategoria | null>(null)
-  const [deleteGasto, setDeleteGasto] = useState<GastoConCategoria | null>(null)
-  const [deleting, setDeleting]   = useState(false)
+  const [categoria, setCategoria] = useState<string>('TODAS')
+  const [busqueda, setBusqueda]   = useState('')
+  const [editar, setEditar]       = useState<Egreso | null>(null)
+  const [borrar, setBorrar]       = useState<Egreso | null>(null)
+  const [borrando, setBorrando]   = useState(false)
+  const [error, setError]         = useState<string | null>(null)
 
-  // El mes lo decide el servidor vía ?mes=; acá sólo se filtra dentro de él.
-  const [catId, setCatId]   = useState<string>('TODAS')
-  const [busqueda, setBusqueda] = useState('')
+  const aviso = avisoListadoParcial(egresos.length, totalFilas)
 
-  const aviso = avisoListadoParcial(gastos.length, totalFilas)
+  const filtrados = useMemo(() => egresos.filter((e) => {
+    const matchCat = categoria === 'TODAS' || e.categoria_egreso === categoria
+    const q = busqueda.toLowerCase()
+    const matchTexto = busqueda === '' ||
+      e.concepto.toLowerCase().includes(q) ||
+      (e.proveedor ?? '').toLowerCase().includes(q) ||
+      (e.medio_pago ?? '').toLowerCase().includes(q)
+    return matchCat && matchTexto
+  }), [egresos, categoria, busqueda])
 
-  function cambiarMes(nuevoMes: string) {
-    router.push(`/gastos?mes=${nuevoMes}`)
-  }
+  const totalFiltrado = filtrados.reduce((s, e) => s + e.monto, 0)
 
-  const filtrados = useMemo(() => {
-    return gastos.filter((g) => {
-      const matchCat    = catId === 'TODAS' || g.categoria_id === catId
-      const matchSearch = busqueda === '' ||
-        g.concepto.toLowerCase().includes(busqueda.toLowerCase()) ||
-        (g.categorias_gasto?.nombre ?? '').toLowerCase().includes(busqueda.toLowerCase())
-      return matchCat && matchSearch
-    })
-  }, [gastos, catId, busqueda])
-
-  function onSaved() {
-    setShowModal(false)
-    setEditGasto(null)
-    router.refresh()
-  }
-
-  async function handleDelete() {
-    if (!deleteGasto) return
-    setDeleting(true)
-    const r = await eliminarGasto(deleteGasto.id)
-    setDeleting(false)
-    if (!r.ok) { setDeleteError(r.error); return }
-    setDeleteGasto(null)
+  async function confirmarBorrado() {
+    if (!borrar?.gasto_id) return
+    setBorrando(true)
+    const r = await eliminarGasto(borrar.gasto_id)
+    setBorrando(false)
+    setBorrar(null)
+    if (!r.ok) { setError(r.error); return }
+    setError(null)
     router.refresh()
   }
 
   return (
     <>
       <div>
-        {/* Header */}
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Gastos</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Gastos operativos. Cada registro genera un egreso de caja automáticamente.
+            <p className="mt-1 text-sm text-gray-500">
+              Todo lo que salió de caja, con su categoría. Los pagos a proveedores
+              también aparecen acá.
             </p>
           </div>
-          <button onClick={() => setShowModal(true)} className="btn-primary shrink-0">
-            + Nuevo gasto
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={() => exportarExcel(
+                filtrados.map((e) => ({
+                  Fecha:     formatFecha(e.fecha),
+                  Categoría: e.categoria_egreso ? LABEL_CATEGORIA[e.categoria_egreso] ?? e.categoria_egreso : 'Sin categoría',
+                  Detalle:   e.concepto,
+                  Proveedor: e.proveedor ?? '',
+                  Medio:     e.medio_pago ?? '',
+                  Monto:     e.monto,
+                })),
+                'Gastos',
+                `gastos-${mes}`,
+              )}
+              className="btn-secondary"
+              disabled={filtrados.length === 0}
+            >
+              Exportar
+            </button>
+            <Link href="/caja" className="btn-primary">
+              Cargar en Caja
+            </Link>
+          </div>
         </div>
+
+        <p className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+          Los egresos se cargan desde <strong>Caja → + Nuevo movimiento</strong>, así la
+          plata queda registrada una sola vez.
+        </p>
+
         {aviso && (
           <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
             {aviso}
           </p>
         )}
-        {deleteError && (
+        {error && (
           <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
-            {deleteError}
+            {error}
           </p>
         )}
 
-
-        {/* Selector de período + resumen */}
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start">
-          {/* Selector de mes */}
-          <div className="card p-4 sm:w-56 shrink-0">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Período</p>
-            <select
-              value={mes}
-              onChange={(e) => cambiarMes(e.target.value)}
-              className="input text-sm"
-            >
-              {meses.map((ym) => {
-                const [y, m] = ym.split('-')
-                return <option key={ym} value={ym}>{mesLabel(parseInt(y), parseInt(m))}</option>
-              })}
-            </select>
-            <div className="mt-3 flex justify-between items-baseline">
-              <span className="text-xs text-gray-500">Total período</span>
-              <span className="text-lg font-bold text-red-600">{formatCurrency(totalMes)}</span>
-            </div>
+        {/* Resumen del mes */}
+        <div className="mb-6 grid gap-4 sm:grid-cols-3">
+          <div className="card p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Total del mes</p>
+            <p className="mt-1 text-2xl font-bold text-gray-900">{formatCurrency(totalMes)}</p>
+            <p className="mt-0.5 text-xs text-gray-400">{mesLabel(mes)}</p>
           </div>
-
-          {/* Breakdown por categoría */}
-          {porCategoria.length > 0 && (
-            <div className="card p-4 flex-1 min-w-0">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Por categoría</p>
-              <div className="space-y-2">
-                {porCategoria.map((cat) => {
-                  const pct = totalMes > 0 ? (cat.total / totalMes) * 100 : 0
-                  return (
-                    <div key={cat.categoria}>
-                      <div className="flex justify-between text-sm mb-0.5">
-                        <span className="text-gray-700 truncate">{cat.categoria}</span>
-                        <span className="font-medium text-gray-900 ml-2 shrink-0">{formatCurrency(cat.total)}</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-gray-100">
-                        <div
-                          className="h-1.5 rounded-full bg-purple-500 transition-all"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  )
-                })}
+          <div className="card p-4 sm:col-span-2">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Por categoría</p>
+            {porCategoria.length === 0 ? (
+              <p className="text-sm text-gray-400">Sin egresos este mes.</p>
+            ) : (
+              <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-sm">
+                {porCategoria.map((c) => (
+                  <span key={c.categoria} className="text-gray-600">
+                    {LABEL_CATEGORIA[c.categoria] ?? 'Sin categoría'}{' '}
+                    <strong className="text-gray-900">{formatCurrency(c.total)}</strong>
+                  </span>
+                ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Filtros */}
         <div className="mb-4 flex flex-wrap items-center gap-3">
-          <button
-            onClick={() => {
-              const rows = filtrados.map((g) => ({
-                'Fecha':         g.fecha,
-                'Categoría':     g.categorias_gasto?.nombre ?? '—',
-                'Concepto':      g.concepto,
-                'Medio de pago': g.medio_pago ?? '—',
-                'Monto':         g.monto,
-              }))
-              exportarExcel(rows, 'Gastos', `gastos-${mes}`)
-            }}
-            className="btn-secondary text-sm"
-          >
-            ↓ Exportar Excel
-          </button>
           <select
-            value={catId}
-            onChange={(e) => setCatId(e.target.value)}
-            className="input w-48 text-sm"
+            value={mes}
+            onChange={(e) => router.push(`/gastos?mes=${e.target.value}`)}
+            className="input w-44 text-sm"
+          >
+            {meses.map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
+          </select>
+
+          <select
+            value={categoria}
+            onChange={(e) => setCategoria(e.target.value)}
+            className="input w-44 text-sm"
           >
             <option value="TODAS">Todas las categorías</option>
-            {categorias.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            {CATEGORIAS_EGRESO.map((c) => (
+              <option key={c.valor} value={c.valor}>{c.label}</option>
+            ))}
           </select>
+
           <input
             type="text"
-            placeholder="Buscar por concepto..."
+            placeholder="Buscar por detalle o proveedor..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            className="input w-56"
+            className="input w-64 text-sm"
           />
-          <span className="text-sm text-gray-400">
-            {filtrados.length} resultado{filtrados.length !== 1 ? 's' : ''} ·{' '}
-            <strong className="text-red-600">{formatCurrency(filtrados.reduce((s, g) => s + g.monto, 0))}</strong>
-          </span>
+
+          {(categoria !== 'TODAS' || busqueda !== '') && (
+            <span className="text-sm text-gray-500">
+              {filtrados.length} de {egresos.length} · {formatCurrency(totalFiltrado)}
+            </span>
+          )}
         </div>
 
-        {/* Tabla */}
         <div className="card overflow-hidden p-0">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -196,38 +203,53 @@ export default function GastosClient({
                 <tr>
                   <th className="table-th">Fecha</th>
                   <th className="table-th">Categoría</th>
-                  <th className="table-th">Concepto</th>
-                  <th className="table-th">Medio de pago</th>
+                  <th className="table-th">Detalle</th>
+                  <th className="table-th">Medio</th>
                   <th className="table-th text-right">Monto</th>
                   <th className="table-th"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filtrados.map((g) => (
-                  <tr key={g.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="table-td text-gray-500 text-sm">{g.fecha}</td>
+                {filtrados.map((e) => (
+                  <tr key={e.movimiento_id} className="transition-colors hover:bg-gray-50">
+                    <td className="table-td text-xs text-gray-500">{formatFecha(e.fecha)}</td>
                     <td className="table-td">
-                      <span className="badge bg-purple-100 text-purple-700">
-                        {g.categorias_gasto?.nombre ?? '—'}
+                      <span className="badge bg-gray-100 text-gray-700">
+                        {e.categoria_egreso
+                          ? LABEL_CATEGORIA[e.categoria_egreso] ?? e.categoria_egreso
+                          : 'Sin categoría'}
                       </span>
                     </td>
-                    <td className="table-td font-medium text-gray-900">{g.concepto}</td>
-                    <td className="table-td text-gray-500 text-sm">{g.medio_pago ?? '—'}</td>
-                    <td className="table-td text-right font-semibold text-red-600">{formatCurrency(g.monto)}</td>
                     <td className="table-td">
-                      <div className="flex items-center gap-3 justify-end">
-                        <button
-                          onClick={() => setEditGasto(g)}
-                          className="text-xs text-blue-600 hover:underline"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => setDeleteGasto(g)}
-                          className="text-xs text-red-500 hover:underline"
-                        >
-                          Eliminar
-                        </button>
+                      <span className="font-medium text-gray-900">{e.concepto}</span>
+                      {e.notas && <span className="block text-xs text-gray-400">{e.notas}</span>}
+                    </td>
+                    <td className="table-td text-sm text-gray-500">{e.medio_pago ?? '—'}</td>
+                    <td className="table-td text-right font-semibold text-gray-900">
+                      {formatCurrency(e.monto)}
+                    </td>
+                    <td className="table-td">
+                      <div className="flex justify-end gap-3">
+                        {e.editable ? (
+                          <>
+                            <button
+                              onClick={() => setEditar(e)}
+                              className="text-xs text-gray-500 hover:underline"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => setBorrar(e)}
+                              className="text-xs text-red-500 hover:underline"
+                            >
+                              Eliminar
+                            </button>
+                          </>
+                        ) : (
+                          <Link href="/pagos" className="text-xs text-gray-400 hover:underline">
+                            Ver en Pagos
+                          </Link>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -235,7 +257,9 @@ export default function GastosClient({
                 {filtrados.length === 0 && (
                   <tr>
                     <td colSpan={6} className="py-12 text-center text-sm text-gray-400">
-                      No hay gastos en este período.
+                      {egresos.length === 0
+                        ? `No hay egresos en ${mesLabel(mes)}.`
+                        : 'Ningún egreso coincide con el filtro.'}
                     </td>
                   </tr>
                 )}
@@ -245,35 +269,31 @@ export default function GastosClient({
         </div>
       </div>
 
-      {/* Modal nuevo gasto */}
-      {showModal && (
+      {editar?.gasto_id && (
         <GastoModal
-          categorias={categorias}
-          onSaved={onSaved}
-          onClose={() => setShowModal(false)}
+          gasto={{
+            gasto_id:         editar.gasto_id,
+            concepto:         editar.concepto,
+            monto:            editar.monto,
+            fecha:            editar.fecha,
+            medio_pago:       editar.medio_pago,
+            categoria_egreso: editar.categoria_egreso,
+            notas:            editar.notas,
+          }}
+          onSaved={() => { setEditar(null); router.refresh() }}
+          onClose={() => setEditar(null)}
         />
       )}
 
-      {/* Modal editar gasto */}
-      {editGasto && (
-        <GastoModal
-          categorias={categorias}
-          gasto={editGasto}
-          onSaved={onSaved}
-          onClose={() => setEditGasto(null)}
-        />
-      )}
-
-      {/* Confirm eliminar */}
-      {deleteGasto && (
+      {borrar && (
         <ConfirmDialog
-          title="Eliminar gasto"
-          message={`¿Eliminás "${deleteGasto.concepto}" por ${formatCurrency(deleteGasto.monto)}? También se eliminará el movimiento de caja asociado.`}
+          title="Eliminar egreso"
+          message={`Se va a eliminar "${borrar.concepto}" por ${formatCurrency(borrar.monto)}. También se borra su movimiento de caja.`}
           confirmLabel="Eliminar"
           variant="danger"
-          loading={deleting}
-          onConfirm={handleDelete}
-          onCancel={() => setDeleteGasto(null)}
+          loading={borrando}
+          onConfirm={confirmarBorrado}
+          onCancel={() => setBorrar(null)}
         />
       )}
     </>

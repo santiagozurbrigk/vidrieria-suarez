@@ -62,7 +62,7 @@ export async function registrarPago(payload: unknown): Promise<Resultado<Pago>> 
     if (error) throw error
 
     revalidatePath('/pagos')
-    revalidatePath('/ventas')
+    revalidatePath('/caja')
     revalidatePath('/compras')
     revalidatePath('/caja')
     revalidatePath('/')

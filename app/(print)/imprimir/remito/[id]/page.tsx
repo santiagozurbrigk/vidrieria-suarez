@@ -1,5 +1,6 @@
 import { createServerClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
+import { NEGOCIO } from '@/lib/negocio'
 
 function formatCurrency(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
@@ -86,7 +87,7 @@ export default async function ImprimirRemitoPage({ params }: { params: Promise<{
         {/* Encabezado empresa */}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'28px', paddingBottom:'20px', borderBottom:'2px solid #e5e7eb' }}>
           <div>
-            <div style={{ fontSize:'22px', fontWeight:800, color:'#111' }}>Vidriería Suárez</div>
+            <div style={{ fontSize:'22px', fontWeight:800, color:'#111' }}>{NEGOCIO.nombre}</div>
             <div style={{ color:'#6b7280', marginTop:'4px', fontSize:'12px' }}>Remito de entrega</div>
           </div>
           <div style={{ textAlign:'right' }}>
@@ -185,7 +186,7 @@ export default async function ImprimirRemitoPage({ params }: { params: Promise<{
           </div>
           <div style={{ textAlign:'center' }}>
             <div style={{ height:'48px' }}></div>
-            <div style={{ borderTop:'1px solid #9ca3af', paddingTop:'8px', color:'#6b7280', fontSize:'12px' }}>Firma y aclaración — Vidriería Suárez</div>
+            <div style={{ borderTop:'1px solid #9ca3af', paddingTop:'8px', color:'#6b7280', fontSize:'12px' }}>Firma y aclaración — {NEGOCIO.nombre}</div>
           </div>
         </div>
       </div>

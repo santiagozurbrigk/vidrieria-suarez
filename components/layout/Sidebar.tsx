@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { NEGOCIO } from '@/lib/negocio'
 import { useRouter } from 'next/navigation'
 
 const navItems = [
@@ -11,7 +12,6 @@ const navItems = [
   { href: '/proveedores',  label: 'Proveedores',    icon: '🏭' },
   { href: '/compras',      label: 'Compras',         icon: '🛒' },
   { href: '/precios',      label: 'Lista de Precios', icon: '💲' },
-  { href: '/ventas',        label: 'Ventas',          icon: '🧾' },
   { href: '/presupuestos', label: 'Presupuestos',   icon: '📄' },
   { href: '/remitos',      label: 'Remitos',        icon: '🚚' },
   { href: '/clientes',     label: 'Clientes',       icon: '👥' },
@@ -41,8 +41,7 @@ export default function Sidebar({ userName }: { userName: string }) {
           🪟
         </div>
         <div>
-          <p className="text-sm font-semibold text-white leading-tight">Vidriería</p>
-          <p className="text-xs text-gray-400">Suárez</p>
+          <p className="text-sm font-semibold leading-tight text-white">{NEGOCIO.nombre}</p>
         </div>
       </div>
 

@@ -74,7 +74,17 @@ Reglas:
 - La fecha va en formato YYYY-MM-DD (año-mes-día).
 - Los montos son números, sin símbolo de moneda ni separadores de miles.
 - Si hay descuentos, reflejalos en el subtotal de cada ítem.
-- En tipo_comprobante elegí el que mejor describa el documento.`
+- En tipo_comprobante elegí el que mejor describa el documento.
+
+Importes (es donde más se suele errar):
+- Transcribí el importe de cada renglón TAL COMO ESTÁ IMPRESO. No le sumes ni
+  le restes IVA, y no lo recalcules.
+- "total" es el importe FINAL A PAGAR que figura en el comprobante, el que ya
+  tiene el IVA adentro. Copialo tal cual; no lo recalcules sumando renglones.
+- "iva" es el importe de IVA discriminado en el comprobante, en pesos. Es la
+  parte del total que corresponde al impuesto, no algo que se le sume encima.
+  Si el comprobante no lo discrimina, devolvé null: no lo estimes.
+- "subtotal" es el neto sin IVA, si el comprobante lo muestra; si no, null.`
 
 /**
  * Extrae los datos de una factura a partir de una foto o un PDF.
