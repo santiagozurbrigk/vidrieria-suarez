@@ -21,6 +21,9 @@ export default async function GastosPage({
     { data: egresos, count },
     { data: porCategoria },
     { data: meses },
+    { data: proveedores },
+    { data: facturasCompra },
+    { data: imputaciones },
   ] = await Promise.all([
     // v_egresos trae TODO lo que salió de caja: los gastos propios y también los
     // pagos a proveedor, sin duplicar la plata.
@@ -38,6 +41,16 @@ export default async function GastosPage({
       .order('total', { ascending: false }),
     // Los meses que tuvieron movimiento, para el selector de período.
     supabase.from('v_caja_por_mes').select('mes').order('mes', { ascending: false }).limit(36),
+    // Lo que necesita el modal para editar un pago a proveedor.
+    supabase.from('proveedores').select('id, razon_social').eq('activo', true).order('razon_social').limit(LIMITE_LISTADO),
+    supabase
+      .from('facturas_compra')
+      .select('id, numero, fecha, total, saldo_pendiente, proveedor_id')
+      .order('fecha')
+      .limit(LIMITE_LISTADO),
+    // Cuánto imputa cada pago a cada factura: el modal lo precarga, y además es
+    // lo que hace que una factura ya saldada por este pago siga siendo elegible.
+    supabase.from('pago_facturas').select('pago_id, factura_compra_id, monto_imputado'),
   ])
 
   const mesesDisponibles = Array.from(
@@ -49,6 +62,12 @@ export default async function GastosPage({
   )
     .sort()
     .reverse()
+
+  // Una factura que quedó en saldo 0 por un pago igual tiene que poder editarse,
+  // porque al reabrir ese pago su saldo se libera.
+  const imputadasPorPago = new Set(
+    (imputaciones ?? []).map((i) => i.factura_compra_id).filter((id): id is string => !!id),
+  )
 
   const categorias = (porCategoria ?? []).map((c) => ({
     categoria: c.categoria ?? 'SIN_CATEGORIA',
@@ -66,10 +85,18 @@ export default async function GastosPage({
         medio_pago:       e.medio_pago,
         categoria_egreso: e.categoria_egreso,
         proveedor:        e.proveedor,
+        proveedor_id:     e.proveedor_id,
         gasto_id:         e.gasto_id,
+        pago_id:          e.pago_id,
         notas:            e.notas,
-        editable:         e.editable ?? false,
       }))}
+      proveedores={proveedores ?? []}
+      facturasCompra={(facturasCompra ?? []).filter((f) => f.saldo_pendiente > 0 || imputadasPorPago.has(f.id))}
+      imputaciones={(imputaciones ?? []).flatMap((i) =>
+        i.pago_id && i.factura_compra_id
+          ? [{ pago_id: i.pago_id, factura_compra_id: i.factura_compra_id, monto_imputado: i.monto_imputado }]
+          : [],
+      )}
       totalFilas={count}
       mes={mes}
       meses={mesesDisponibles}
