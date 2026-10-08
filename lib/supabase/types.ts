@@ -1688,6 +1688,7 @@ export type Database = {
         };
       };
       eliminar_egreso_caja: { Args: { p_movimiento_id: string }; Returns: undefined };
+      eliminar_movimiento_caja: { Args: { p_movimiento_id: string }; Returns: undefined };
       get_user_rol: {
         Args: Record<PropertyKey, never>;
         Returns: Database["public"]["Enums"]["rol_usuario"];
