@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import GastoModal from './GastoModal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
-import { eliminarGasto } from '@/lib/actions/gastos'
+import { eliminarEgreso } from '@/lib/actions/gastos'
 import { exportarExcel } from '@/lib/exportar'
 import { nombreMes } from '@/lib/fechas'
 import { avisoListadoParcial } from '@/lib/paginacion'
@@ -19,14 +19,29 @@ type Egreso = {
   medio_pago:       string | null
   categoria_egreso: string | null
   proveedor:        string | null
+  proveedor_id:     string | null
   gasto_id:         string | null
+  /** Con pago_id, el egreso es un pago a proveedor y arrastra imputaciones. */
+  pago_id:          string | null
   notas:            string | null
-  /** Sólo los gastos propios se editan acá; un pago a proveedor arrastra imputaciones. */
-  editable:         boolean
 }
 
+type ProveedorSlim = { id: string; razon_social: string }
+type FacturaSlim = {
+  id: string
+  numero: string
+  fecha: string
+  total: number
+  saldo_pendiente: number
+  proveedor_id: string
+}
+type Imputacion = { pago_id: string; factura_compra_id: string; monto_imputado: number }
+
 type Props = {
-  egresos:      Egreso[]
+  egresos:        Egreso[]
+  proveedores:    ProveedorSlim[]
+  facturasCompra: FacturaSlim[]
+  imputaciones:   Imputacion[]
   totalFilas:   number | null
   /** Período mostrado, 'YYYY-MM'. Lo resuelve el servidor desde ?mes=. */
   mes:          string
@@ -49,7 +64,8 @@ function mesLabel(mes: string) {
 }
 
 export default function GastosClient({
-  egresos, totalFilas, mes, meses, totalMes, porCategoria,
+  egresos, proveedores, facturasCompra, imputaciones,
+  totalFilas, mes, meses, totalMes, porCategoria,
 }: Props) {
   const router = useRouter()
   const [categoria, setCategoria] = useState<string>('TODAS')
@@ -74,9 +90,9 @@ export default function GastosClient({
   const totalFiltrado = filtrados.reduce((s, e) => s + e.monto, 0)
 
   async function confirmarBorrado() {
-    if (!borrar?.gasto_id) return
+    if (!borrar) return
     setBorrando(true)
-    const r = await eliminarGasto(borrar.gasto_id)
+    const r = await eliminarEgreso(borrar.movimiento_id)
     setBorrando(false)
     setBorrar(null)
     if (!r.ok) { setError(r.error); return }
@@ -230,26 +246,18 @@ export default function GastosClient({
                     </td>
                     <td className="table-td">
                       <div className="flex justify-end gap-3">
-                        {e.editable ? (
-                          <>
-                            <button
-                              onClick={() => setEditar(e)}
-                              className="text-xs text-gray-500 hover:underline"
-                            >
-                              Editar
-                            </button>
-                            <button
-                              onClick={() => setBorrar(e)}
-                              className="text-xs text-red-500 hover:underline"
-                            >
-                              Eliminar
-                            </button>
-                          </>
-                        ) : (
-                          <Link href="/pagos" className="text-xs text-gray-400 hover:underline">
-                            Ver en Pagos
-                          </Link>
-                        )}
+                        <button
+                          onClick={() => setEditar(e)}
+                          className="text-xs text-gray-500 hover:underline"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => setBorrar(e)}
+                          className="text-xs text-red-500 hover:underline"
+                        >
+                          Eliminar
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -269,17 +277,29 @@ export default function GastosClient({
         </div>
       </div>
 
-      {editar?.gasto_id && (
+      {editar && (
         <GastoModal
-          gasto={{
-            gasto_id:         editar.gasto_id,
+          egreso={{
+            movimiento_id:    editar.movimiento_id,
             concepto:         editar.concepto,
             monto:            editar.monto,
             fecha:            editar.fecha,
             medio_pago:       editar.medio_pago,
             categoria_egreso: editar.categoria_egreso,
+            proveedor_id:     editar.proveedor_id,
             notas:            editar.notas,
+            es_pago:          !!editar.pago_id,
           }}
+          proveedores={proveedores}
+          facturasCompra={facturasCompra.map((f) => ({
+            ...f,
+            // Lo que este pago le imputa hoy a esa factura.
+            imputado_aqui: editar.pago_id
+              ? imputaciones
+                  .filter((i) => i.pago_id === editar.pago_id && i.factura_compra_id === f.id)
+                  .reduce((s, i) => s + i.monto_imputado, 0)
+              : 0,
+          }))}
           onSaved={() => { setEditar(null); router.refresh() }}
           onClose={() => setEditar(null)}
         />
@@ -288,7 +308,11 @@ export default function GastosClient({
       {borrar && (
         <ConfirmDialog
           title="Eliminar egreso"
-          message={`Se va a eliminar "${borrar.concepto}" por ${formatCurrency(borrar.monto)}. También se borra su movimiento de caja.`}
+          message={
+            borrar.pago_id
+              ? `Se va a eliminar el pago de ${formatCurrency(borrar.monto)}${borrar.proveedor ? ` a ${borrar.proveedor}` : ''}. El saldo de las facturas que pagaba vuelve a quedar pendiente.`
+              : `Se va a eliminar "${borrar.concepto}" por ${formatCurrency(borrar.monto)}. También se borra su movimiento de caja.`
+          }
           confirmLabel="Eliminar"
           variant="danger"
           loading={borrando}

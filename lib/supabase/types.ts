@@ -17,6 +17,7 @@ export type Database = {
           telefono: string | null;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           activo?: boolean;
           apellido?: string | null;
@@ -55,6 +56,7 @@ export type Database = {
           id: number;
           usuario_id: string | null;
         };
+        ComputedFields: never;
         Insert: {
           accion: string;
           created_at?: string;
@@ -91,6 +93,7 @@ export type Database = {
           id: string;
           nombre: string;
         };
+        ComputedFields: never;
         Insert: {
           activo?: boolean;
           created_at?: string;
@@ -120,6 +123,7 @@ export type Database = {
           updated_at: string;
           usuario_id: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           diferencia?: number | null;
@@ -170,6 +174,7 @@ export type Database = {
           telefono: string | null;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           activo?: boolean;
           apellido?: string | null;
@@ -209,6 +214,7 @@ export type Database = {
           ultimo_numero: number;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           prefijo?: string;
           tipo: string;
@@ -233,6 +239,7 @@ export type Database = {
           producto_id: string;
           subtotal: number;
         };
+        ComputedFields: never;
         Insert: {
           cantidad: number;
           costo_unitario: number;
@@ -285,6 +292,7 @@ export type Database = {
           producto_id: string;
           subtotal: number;
         };
+        ComputedFields: never;
         Insert: {
           cantidad: number;
           created_at?: string;
@@ -345,6 +353,7 @@ export type Database = {
           total: number;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           archivo_adjunto_path?: string | null;
           created_at?: string;
@@ -414,6 +423,7 @@ export type Database = {
           total: number;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           archivo_adjunto_path?: string | null;
           cliente_id: string;
@@ -480,6 +490,7 @@ export type Database = {
           proveedor_id: string | null;
           usuario_id: string;
         };
+        ComputedFields: never;
         Insert: {
           archivo_adjunto_path?: string | null;
           categoria_egreso?: Database["public"]["Enums"]["categoria_egreso"] | null;
@@ -548,6 +559,7 @@ export type Database = {
           tipo: Database["public"]["Enums"]["tipo_movimiento_caja"];
           usuario_id: string;
         };
+        ComputedFields: never;
         Insert: {
           categoria_egreso?: Database["public"]["Enums"]["categoria_egreso"] | null;
           concepto: string;
@@ -629,6 +641,7 @@ export type Database = {
           tipo: Database["public"]["Enums"]["tipo_movimiento_stock"];
           usuario_id: string;
         };
+        ComputedFields: never;
         Insert: {
           cantidad: number;
           created_at?: string;
@@ -703,6 +716,7 @@ export type Database = {
           notas: string | null;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           activo?: boolean;
           arquitecto_id: string;
@@ -751,6 +765,7 @@ export type Database = {
           monto_imputado: number;
           pago_id: string;
         };
+        ComputedFields: never;
         Insert: {
           created_at?: string;
           factura_compra_id?: string | null;
@@ -804,6 +819,7 @@ export type Database = {
           proveedor_id: string | null;
           tipo: Database["public"]["Enums"]["tipo_pago"];
         };
+        ComputedFields: never;
         Insert: {
           cliente_id?: string | null;
           created_at?: string;
@@ -863,6 +879,7 @@ export type Database = {
           producto_id: string | null;
           subtotal: number;
         };
+        ComputedFields: never;
         Insert: {
           cantidad: number;
           created_at?: string;
@@ -924,6 +941,7 @@ export type Database = {
           updated_at: string;
           validez_dias: number;
         };
+        ComputedFields: never;
         Insert: {
           arquitecto_id: string;
           cliente_id?: string | null;
@@ -1010,6 +1028,7 @@ export type Database = {
           unidad_medida: Database["public"]["Enums"]["unidad_medida"];
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           activo?: boolean;
           categoria: Database["public"]["Enums"]["categoria_producto"];
@@ -1050,6 +1069,7 @@ export type Database = {
           nombre: string;
           rol: Database["public"]["Enums"]["rol_usuario"];
         };
+        ComputedFields: never;
         Insert: {
           activo?: boolean;
           created_at?: string;
@@ -1084,6 +1104,7 @@ export type Database = {
           telefono: string | null;
           updated_at: string;
         };
+        ComputedFields: never;
         Insert: {
           activo?: boolean;
           alias_cbu?: string | null;
@@ -1131,6 +1152,7 @@ export type Database = {
           remito_id: string;
           subtotal: number;
         };
+        ComputedFields: never;
         Insert: {
           cantidad: number;
           created_at?: string;
@@ -1189,6 +1211,7 @@ export type Database = {
           numero: string;
           total: number;
         };
+        ComputedFields: never;
         Insert: {
           archivo_adjunto_path?: string | null;
           cliente_id: string;
@@ -1249,6 +1272,7 @@ export type Database = {
           movimientos: number | null;
           neto: number | null;
         };
+        ComputedFields: never;
         Relationships: [];
       };
       v_caja_por_mes: {
@@ -1259,6 +1283,7 @@ export type Database = {
           movimientos: number | null;
           neto: number | null;
         };
+        ComputedFields: never;
         Relationships: [];
       };
       v_caja_por_semana: {
@@ -1269,6 +1294,7 @@ export type Database = {
           neto: number | null;
           semana: string | null;
         };
+        ComputedFields: never;
         Relationships: [];
       };
       v_egresos: {
@@ -1286,6 +1312,7 @@ export type Database = {
           proveedor: string | null;
           proveedor_id: string | null;
         };
+        ComputedFields: never;
         Relationships: [
           {
             foreignKeyName: "fk_caja_gasto";
@@ -1317,6 +1344,7 @@ export type Database = {
           mes: string | null;
           total: number | null;
         };
+        ComputedFields: never;
         Relationships: [];
       };
       v_gastos_por_categoria_mes: {
@@ -1327,6 +1355,7 @@ export type Database = {
           mes: string | null;
           total: number | null;
         };
+        ComputedFields: never;
         Relationships: [
           {
             foreignKeyName: "gastos_categoria_id_fkey";
@@ -1343,6 +1372,7 @@ export type Database = {
           mes: string | null;
           total: number | null;
         };
+        ComputedFields: never;
         Relationships: [];
       };
       v_productos_bajo_minimo: {
@@ -1361,6 +1391,7 @@ export type Database = {
           unidad_medida: Database["public"]["Enums"]["unidad_medida"] | null;
           updated_at: string | null;
         };
+        ComputedFields: never;
         Insert: {
           activo?: boolean | null;
           categoria?: Database["public"]["Enums"]["categoria_producto"] | null;
@@ -1402,6 +1433,7 @@ export type Database = {
           total_facturado: number | null;
           total_pendiente: number | null;
         };
+        ComputedFields: never;
         Relationships: [];
       };
       v_resumen_pagos: {
@@ -1410,6 +1442,7 @@ export type Database = {
           total_cobros: number | null;
           total_pagos: number | null;
         };
+        ComputedFields: never;
         Relationships: [];
       };
       v_resumen_presupuestos: {
@@ -1422,6 +1455,7 @@ export type Database = {
           rechazados: number | null;
           total: number | null;
         };
+        ComputedFields: never;
         Relationships: [];
       };
       v_resumen_remitos: {
@@ -1431,6 +1465,7 @@ export type Database = {
           entregados: number | null;
           pendientes: number | null;
         };
+        ComputedFields: never;
         Relationships: [];
       };
       v_resumen_ventas: {
@@ -1442,6 +1477,7 @@ export type Database = {
           total_facturado: number | null;
           total_pendiente: number | null;
         };
+        ComputedFields: never;
         Relationships: [];
       };
       v_saldo_caja: {
@@ -1450,10 +1486,45 @@ export type Database = {
           total_egresos: number | null;
           total_ingresos: number | null;
         };
+        ComputedFields: never;
         Relationships: [];
       };
     };
     Functions: {
+      actualizar_egreso_caja: {
+        Args: {
+          p_categoria?: Database["public"]["Enums"]["categoria_egreso"];
+          p_concepto?: string;
+          p_fecha: string;
+          p_imputaciones?: Json;
+          p_medio_pago: string;
+          p_monto: number;
+          p_movimiento_id: string;
+          p_notas?: string;
+          p_proveedor_id?: string;
+        };
+        Returns: {
+          categoria_egreso: Database["public"]["Enums"]["categoria_egreso"] | null;
+          concepto: string;
+          created_at: string;
+          factura_venta_id: string | null;
+          fecha: string;
+          gasto_id: string | null;
+          id: string;
+          medio_pago: string | null;
+          monto: number;
+          pago_id: string | null;
+          proveedor_id: string | null;
+          tipo: Database["public"]["Enums"]["tipo_movimiento_caja"];
+          usuario_id: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "movimientos_caja";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       cliente_consumidor_final: { Args: Record<PropertyKey, never>; Returns: string };
       convertir_presupuesto_en_factura: {
         Args: { p_numero?: string; p_presupuesto_id: string };
@@ -1616,6 +1687,7 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      eliminar_egreso_caja: { Args: { p_movimiento_id: string }; Returns: undefined };
       get_user_rol: {
         Args: Record<PropertyKey, never>;
         Returns: Database["public"]["Enums"]["rol_usuario"];
@@ -1623,6 +1695,8 @@ export type Database = {
       is_admin: { Args: Record<PropertyKey, never>; Returns: boolean };
       is_vendedor_or_above: { Args: Record<PropertyKey, never>; Returns: boolean };
       recalcular_precios_proveedor: { Args: { p_proveedor_id: string }; Returns: number };
+      recalcular_saldo_factura_compra: { Args: { p_factura_id: string }; Returns: undefined };
+      recalcular_saldo_factura_venta: { Args: { p_factura_id: string }; Returns: undefined };
       registrar_cobro_venta: {
         Args: {
           p_factura_id: string;
@@ -1943,7 +2017,6 @@ export type PagoFactura = Tables<"pago_facturas">;
 export type CierreCaja = Tables<"cierres_caja">;
 export type Remito = Tables<"remitos">;
 export type RemitoItem = Tables<"remito_items">;
-
 export type ResumenVentas = Views<"v_resumen_ventas">;
 export type ResumenCompras = Views<"v_resumen_compras">;
 export type ResumenPagos = Views<"v_resumen_pagos">;
@@ -1951,7 +2024,6 @@ export type ResumenPresupuestos = Views<"v_resumen_presupuestos">;
 export type ResumenRemitos = Views<"v_resumen_remitos">;
 export type GastosPorMes = Views<"v_gastos_por_mes">;
 export type GastosPorCategoriaMes = Views<"v_gastos_por_categoria_mes">;
-
 export type Egreso = Views<"v_egresos">;
 export type CajaPorDia = Views<"v_caja_por_dia">;
 export type CajaPorSemana = Views<"v_caja_por_semana">;

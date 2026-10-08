@@ -123,10 +123,19 @@ Arriba ves el total del mes y cuánto se fue en cada categoría.
 
 ### Editar o borrar
 
-- Los gastos comunes (servicio, combustible, varios…) los podés **editar** o
-  **eliminar** desde acá. Al eliminarlos también se borra su movimiento de caja.
-- Los **pagos a proveedor** no se editan desde Gastos, porque arrastran la
-  imputación a las facturas. Para esos, el botón te lleva a **Pagos**.
+**Todas las filas** se pueden editar y eliminar, con los botones de la derecha.
+
+- **Un gasto común** (servicio, combustible, varios…): cambiás la categoría, el
+  detalle, el monto, la fecha o el medio de pago. Al eliminarlo también se borra
+  su movimiento de caja.
+- **Un pago a proveedor**: el modal te muestra el proveedor y las facturas con el
+  reparto que tiene hoy. Si cambiás el monto, **repartilo de nuevo** entre las
+  facturas. Al eliminarlo, **el saldo de las facturas que pagaba vuelve a quedar
+  pendiente**, así que la deuda con ese proveedor sube de nuevo.
+
+> Si un gasto común en realidad era un pago a proveedor, eliminalo y cargalo de
+> nuevo desde Caja: así se imputa a sus facturas. No se puede convertir en el
+> lugar, porque un pago necesita saber a qué factura va.
 
 ---
 
@@ -393,8 +402,9 @@ final*.
 Se puede: en el egreso de categoría *Proveedor*, cargale a esa factura sólo lo que
 le pagaste. El resto queda pendiente en la misma factura.
 
-**Un pago a proveedor no lo puedo editar desde Gastos.**
-Es a propósito: arrastra la imputación a las facturas. Se maneja desde **💳 Pagos**.
+**Eliminé un pago a proveedor. ¿Qué pasa con la factura?**
+Vuelve a quedar con saldo pendiente por lo que ese pago le había imputado, y la
+deuda con el proveedor sube de nuevo. El sistema te lo avisa antes de confirmar.
 
 **¿Y el módulo de Ventas?**
 Ya no está. Las ventas se cargan desde Caja y se ven ahí mismo, junto con todo lo
