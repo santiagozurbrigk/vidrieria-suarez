@@ -7,7 +7,7 @@ import GastoModal from './GastoModal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { eliminarEgreso } from '@/lib/actions/gastos'
 import { exportarExcel } from '@/lib/exportar'
-import { nombreMes } from '@/lib/fechas'
+import { formatearFecha, nombreMes } from '@/lib/fechas'
 import { avisoListadoParcial } from '@/lib/paginacion'
 import { CATEGORIAS_EGRESO, LABEL_CATEGORIA } from '@/lib/caja'
 
@@ -52,10 +52,6 @@ type Props = {
 
 function formatCurrency(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
-}
-
-function formatFecha(d: string) {
-  return new Date(d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
 }
 
 function mesLabel(mes: string) {
@@ -115,7 +111,7 @@ export default function GastosClient({
             <button
               onClick={() => exportarExcel(
                 filtrados.map((e) => ({
-                  Fecha:     formatFecha(e.fecha),
+                  Fecha:     formatearFecha(e.fecha),
                   Categoría: e.categoria_egreso ? LABEL_CATEGORIA[e.categoria_egreso] ?? e.categoria_egreso : 'Sin categoría',
                   Detalle:   e.concepto,
                   Proveedor: e.proveedor ?? '',
@@ -228,7 +224,7 @@ export default function GastosClient({
               <tbody className="divide-y divide-gray-50">
                 {filtrados.map((e) => (
                   <tr key={e.movimiento_id} className="transition-colors hover:bg-gray-50">
-                    <td className="table-td text-xs text-gray-500">{formatFecha(e.fecha)}</td>
+                    <td className="table-td text-xs text-gray-500">{formatearFecha(e.fecha)}</td>
                     <td className="table-td">
                       <span className="badge bg-gray-100 text-gray-700">
                         {e.categoria_egreso

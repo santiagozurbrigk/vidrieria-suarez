@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { editarEgreso } from '@/lib/actions/gastos'
 import { CATEGORIAS_EGRESO, MEDIOS_PAGO, type CategoriaEgreso } from '@/lib/caja'
+import { fechaParaInput } from '@/lib/fechas'
 
 /**
  * Edición de un egreso ya cargado. No crea: los egresos nuevos entran por Caja.
@@ -62,8 +63,9 @@ export default function GastoModal({
   )
   const [concepto, setConcepto]   = useState(egreso.concepto)
   const [monto, setMonto]         = useState<number | ''>(egreso.monto)
-  // `fecha` llega como timestamptz de la vista; el input necesita YYYY-MM-DD.
-  const [fecha, setFecha]         = useState(egreso.fecha.slice(0, 10))
+  // `fecha` llega como timestamptz de la vista; el input necesita YYYY-MM-DD en
+  // la zona del negocio, no en UTC.
+  const [fecha, setFecha]         = useState(fechaParaInput(egreso.fecha))
   const [medioPago, setMedioPago] = useState(egreso.medio_pago ?? 'Efectivo')
   const [notas, setNotas]         = useState(egreso.notas ?? '')
   const [proveedorId, setProveedorId] = useState(egreso.proveedor_id ?? '')
