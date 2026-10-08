@@ -213,3 +213,24 @@ function revalidarTodo() {
   revalidatePath('/pagos')
   revalidatePath('/')
 }
+
+/**
+ * Elimina un movimiento de caja, sea el que sea, y deshace lo que había
+ * provocado: una venta devuelve el stock y borra su factura, un pago a
+ * proveedor devuelve el saldo a las facturas que había pagado.
+ *
+ * Caja es la única vista de la plata, así que tiene que poder sacar una fila mal
+ * cargada; Gastos sólo alcanza a los egresos.
+ */
+export async function eliminarMovimiento(movimientoId: string): Promise<Resultado> {
+  return ejecutar(async () => {
+    const { supabase } = await conUsuario()
+
+    const { error } = await supabase.rpc('eliminar_movimiento_caja', {
+      p_movimiento_id: parsear(z.string().uuid(), movimientoId),
+    })
+    if (error) throw error
+
+    revalidarTodo()
+  })
+}

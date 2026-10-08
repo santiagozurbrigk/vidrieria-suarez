@@ -99,6 +99,22 @@ Botón **Cierre del día**. El sistema te dice cuánto debería haber según los
 movimientos; vos contás la caja y pones cuánto hay de verdad. Queda guardada la
 diferencia.
 
+### Borrar un movimiento
+
+Cada fila de la lista tiene **Eliminar**. Antes de confirmar te dice qué más se
+lleva puesto:
+
+| Si el movimiento era… | Al borrarlo |
+|---|---|
+| Una **venta** | Se borra la venta y **el stock vuelve a su lugar** |
+| Un **pago a proveedor** | El saldo de las facturas que pagaba vuelve a quedar pendiente |
+| Un **gasto** | Se borra también el gasto |
+| Un ingreso suelto o un ajuste | Se borra sólo ese movimiento |
+
+Si la venta tenía un remito o venía de un presupuesto, **esos no se borran**:
+quedan desvinculados, y el presupuesto vuelve a *Aprobado* para que lo puedas
+convertir de nuevo.
+
 ### El botón Ajuste
 
 Es sólo para corregir una diferencia de conteo que no sabés de dónde salió. **No

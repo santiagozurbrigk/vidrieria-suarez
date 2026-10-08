@@ -7,6 +7,8 @@ import CierreModal from './CierreModal'
 import MovimientoModal from './MovimientoModal'
 import GraficosCaja from './GraficosCaja'
 import { LABEL_CATEGORIA } from '@/lib/caja'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import { eliminarMovimiento } from '@/lib/actions/caja'
 import { useRouter } from 'next/navigation'
 import { avisoListadoParcial } from '@/lib/paginacion'
 
@@ -49,6 +51,9 @@ export default function CajaClient({
   const [showAjuste, setShowAjuste] = useState(false)
   const [showCierre, setShowCierre] = useState(false)
   const [showMovimiento, setShowMovimiento] = useState(false)
+  const [borrar, setBorrar]     = useState<MovimientoCaja | null>(null)
+  const [borrando, setBorrando] = useState(false)
+  const [errorBorrado, setErrorBorrado] = useState<string | null>(null)
 
   const filtrados = initial.filter((m) => {
     const matchTipo     = filtro === 'TODOS' || m.tipo === filtro
@@ -60,6 +65,34 @@ export default function CajaClient({
 
   function onSaved() {
     router.refresh()
+  }
+
+  async function confirmarBorrado() {
+    if (!borrar) return
+    setBorrando(true)
+    const r = await eliminarMovimiento(borrar.id)
+    setBorrando(false)
+    setBorrar(null)
+    if (!r.ok) { setErrorBorrado(r.error); return }
+    setErrorBorrado(null)
+    router.refresh()
+  }
+
+  /** Qué más se lleva puesto el borrado, según de dónde venga el movimiento. */
+  function consecuenciaDeBorrar(m: MovimientoCaja) {
+    if (m.factura_venta_id) {
+      return 'Se borra la venta y su comprobante, y el stock de los productos vendidos vuelve a su lugar.'
+    }
+    if (m.pago_id && m.tipo === 'EGRESO') {
+      return 'El saldo de las facturas que pagaba vuelve a quedar pendiente.'
+    }
+    if (m.pago_id) {
+      return 'También se borra el cobro que lo generó.'
+    }
+    if (m.gasto_id) {
+      return 'También se borra el gasto que lo generó.'
+    }
+    return 'Se borra sólo este movimiento.'
   }
 
   const tipoBadge = (tipo: string) => {
@@ -98,6 +131,11 @@ export default function CajaClient({
         {aviso && (
           <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
             {aviso}
+          </p>
+        )}
+        {errorBorrado && (
+          <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+            {errorBorrado}
           </p>
         )}
 
@@ -185,6 +223,7 @@ export default function CajaClient({
                       <th className="table-th">Categoría</th>
                       <th className="table-th">Medio</th>
                       <th className="table-th text-right">Monto</th>
+                      <th className="table-th"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -208,11 +247,19 @@ export default function CajaClient({
                         }`}>
                           {m.tipo === 'INGRESO' ? '+' : m.tipo === 'EGRESO' ? '−' : ''}{formatCurrency(m.monto)}
                         </td>
+                        <td className="table-td text-right">
+                          <button
+                            onClick={() => setBorrar(m)}
+                            className="text-xs text-red-500 hover:underline"
+                          >
+                            Eliminar
+                          </button>
+                        </td>
                       </tr>
                     ))}
                     {filtrados.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="py-12 text-center text-sm text-gray-400">
+                        <td colSpan={7} className="py-12 text-center text-sm text-gray-400">
                           No hay movimientos.
                         </td>
                       </tr>
@@ -291,6 +338,17 @@ export default function CajaClient({
         <AjusteModal
           onSaved={() => { setShowAjuste(false); onSaved() }}
           onClose={() => setShowAjuste(false)}
+        />
+      )}
+      {borrar && (
+        <ConfirmDialog
+          title="Eliminar movimiento"
+          message={`Se va a eliminar "${borrar.concepto}" por ${formatCurrency(borrar.monto)}. ${consecuenciaDeBorrar(borrar)}`}
+          confirmLabel="Eliminar"
+          variant="danger"
+          loading={borrando}
+          onConfirm={confirmarBorrado}
+          onCancel={() => setBorrar(null)}
         />
       )}
       {showCierre && (
