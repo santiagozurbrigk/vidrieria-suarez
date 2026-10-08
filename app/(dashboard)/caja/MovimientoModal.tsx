@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { registrarVenta, registrarIngreso, registrarEgreso } from '@/lib/actions/caja'
+import { registrarVenta, registrarIngreso, registrarEgreso, registrarCobro } from '@/lib/actions/caja'
 import { CATEGORIAS_EGRESO, MEDIOS_PAGO, type CategoriaEgreso } from '@/lib/caja'
 import { hoy } from '@/lib/fechas'
 
@@ -9,18 +9,20 @@ type ProductoSlim = { id: string; nombre: string; unidad_medida: string; precio_
 type ClienteSlim  = { id: string; nombre: string; apellido: string | null; razon_social: string | null }
 type ProveedorSlim = { id: string; razon_social: string }
 type FacturaCompraSlim = { id: string; numero: string; fecha: string; total: number; saldo_pendiente: number; proveedor_id: string }
+type FacturaVentaSlim  = { id: string; numero: string; fecha: string; total: number; saldo_pendiente: number; cliente_id: string }
 
 type Props = {
   productos:      ProductoSlim[]
   clientes:       ClienteSlim[]
   proveedores:    ProveedorSlim[]
   facturasCompra: FacturaCompraSlim[]
+  facturasVenta:  FacturaVentaSlim[]
   onSaved: () => void
   onClose: () => void
 }
 
 type Tipo = 'INGRESO' | 'EGRESO'
-type MotivoIngreso = 'VENTA' | 'OTRO'
+type MotivoIngreso = 'VENTA' | 'COBRO' | 'OTRO'
 
 type ItemVenta = {
   producto_id:     string
@@ -48,7 +50,7 @@ function clienteLabel(c: ClienteSlim) {
 }
 
 export default function MovimientoModal({
-  productos, clientes, proveedores, facturasCompra, onSaved, onClose,
+  productos, clientes, proveedores, facturasCompra, facturasVenta, onSaved, onClose,
 }: Props) {
   const [tipo, setTipo]       = useState<Tipo>('INGRESO')
   const [motivo, setMotivo]   = useState<MotivoIngreso>('VENTA')
@@ -72,7 +74,13 @@ export default function MovimientoModal({
   const [proveedorId, setProveedorId] = useState('')
   const [imputado, setImputado]       = useState<Record<string, number>>({})
 
+  // Cobro de una factura ya emitida: reparte el monto entre las facturas del
+  // cliente con saldo, igual que el egreso a proveedor del otro lado.
+  const [cobroClienteId, setCobroClienteId] = useState('')
+  const [imputadoVenta, setImputadoVenta]   = useState<Record<string, number>>({})
+
   const esVenta     = tipo === 'INGRESO' && motivo === 'VENTA'
+  const esCobro     = tipo === 'INGRESO' && motivo === 'COBRO'
   const esProveedor = tipo === 'EGRESO' && categoria === 'PROVEEDOR'
 
   const totalVenta = redondear(items.reduce((s, i) => s + i.subtotal, 0))
@@ -80,6 +88,12 @@ export default function MovimientoModal({
 
   const facturasDelProveedor = facturasCompra.filter(
     (f) => f.proveedor_id === proveedorId && f.saldo_pendiente > 0,
+  )
+  const facturasDelCliente = facturasVenta.filter(
+    (f) => f.cliente_id === cobroClienteId && f.saldo_pendiente > 0,
+  )
+  const totalImputadoVenta = redondear(
+    Object.values(imputadoVenta).reduce((s, v) => s + (Number.isFinite(v) ? v : 0), 0),
   )
   const totalImputado = redondear(
     Object.values(imputado).reduce((s, v) => s + (Number.isFinite(v) ? v : 0), 0),
@@ -127,13 +141,21 @@ export default function MovimientoModal({
       return
     }
 
+    if (esCobro) {
+      if (!cobroClienteId) { setError('Elegí el cliente que pagó.'); return }
+      if (totalImputadoVenta > montoFinal + 0.001) {
+        setError('Lo cargado a las facturas supera el monto del cobro.')
+        return
+      }
+    }
+
     if (esProveedor) {
       if (!proveedorId) { setError('Elegí el proveedor al que se le pagó.'); return }
       if (totalImputado > montoFinal + 0.001) {
         setError('Lo cargado a las facturas supera el monto del egreso.')
         return
       }
-    } else if (!esVenta && !concepto.trim()) {
+    } else if (!esVenta && !esCobro && !concepto.trim()) {
       setError('Detallá de qué es el movimiento.')
       return
     }
@@ -151,6 +173,17 @@ export default function MovimientoModal({
             producto_id, cantidad, precio_unitario, subtotal,
           })),
         })
+      : esCobro
+        ? await registrarCobro({
+            cliente_id: cobroClienteId,
+            monto:      montoFinal,
+            medio_pago: medioPago,
+            fecha,
+            imputaciones: Object.entries(imputadoVenta)
+              .filter(([, v]) => v > 0)
+              .map(([factura_venta_id, monto_imputado]) => ({ factura_venta_id, monto_imputado })),
+            notas: notas.trim(),
+          })
       : tipo === 'INGRESO'
         ? await registrarIngreso({
             concepto: concepto.trim(), monto: montoFinal,
@@ -215,7 +248,11 @@ export default function MovimientoModal({
               <div>
                 <label className="label">¿De qué es el ingreso? *</label>
                 <div className="flex overflow-hidden rounded-lg border border-gray-200 text-sm">
-                  {([['VENTA', 'Venta de productos'], ['OTRO', 'Otro motivo']] as const).map(([v, l]) => (
+                  {([
+                    ['VENTA', 'Venta de productos'],
+                    ['COBRO', 'Cobro de una factura'],
+                    ['OTRO',  'Otro motivo'],
+                  ] as const).map(([v, l]) => (
                     <button
                       key={v}
                       type="button"
@@ -262,8 +299,53 @@ export default function MovimientoModal({
               total={totalVenta} iva={iva} setIva={setIva}
             />}
 
+            {/* ── Cobro de una factura ya emitida ── */}
+            {esCobro && (
+              <>
+                <div>
+                  <label className="label">Cliente que pagó *</label>
+                  <select
+                    value={cobroClienteId}
+                    onChange={(e) => { setCobroClienteId(e.target.value); setImputadoVenta({}) }}
+                    className="input"
+                    required
+                  >
+                    <option value="">Elegí el cliente…</option>
+                    {clientes.map((c) => (
+                      <option key={c.id} value={c.id}>{clienteLabel(c)}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="label">Monto cobrado *</label>
+                  <input
+                    type="number" step="0.01" min="0.01"
+                    value={monto}
+                    onChange={(e) => setMonto(parseFloat(e.target.value) || '')}
+                    className="input"
+                    placeholder="0"
+                  />
+                </div>
+
+                {cobroClienteId && (
+                  <FacturasAImputar
+                    facturas={facturasDelCliente.map((f) => ({
+                      id: f.id, numero: f.numero, fecha: f.fecha, saldo: f.saldo_pendiente,
+                    }))}
+                    imputado={imputadoVenta}
+                    setImputado={setImputadoVenta}
+                    totalImputado={totalImputadoVenta}
+                    sinImputar={redondear(montoFinal - totalImputadoVenta)}
+                    vacio="Este cliente no tiene facturas con saldo pendiente. El cobro queda registrado a cuenta."
+                    ayuda="Podés cobrar una parte: si una factura debe $100.000 y le cargás $40.000, quedan $60.000 pendientes."
+                  />
+                )}
+              </>
+            )}
+
             {/* ── Otro ingreso, o egreso que no es a proveedor: concepto + monto ── */}
-            {!esVenta && !esProveedor && (
+            {!esVenta && !esCobro && !esProveedor && (
               <>
                 <div>
                   <label className="label">
@@ -489,6 +571,101 @@ function VentaFields({
   )
 }
 
+
+// ── Reparto de un monto entre facturas ───────────────────────────────────────
+// Lo usan los dos lados: el cobro a un cliente y el pago a un proveedor. La
+// mecánica es la misma, sólo cambia de qué facturas se trata.
+
+function FacturasAImputar({
+  facturas, imputado, setImputado, totalImputado, sinImputar, vacio, ayuda,
+}: {
+  facturas: { id: string; numero: string; fecha: string; saldo: number }[]
+  imputado: Record<string, number>
+  setImputado: React.Dispatch<React.SetStateAction<Record<string, number>>>
+  totalImputado: number
+  sinImputar: number
+  vacio: string
+  ayuda: string
+}) {
+  const deuda = facturas.reduce((s, f) => s + f.saldo, 0)
+
+  if (facturas.length === 0) {
+    return (
+      <p className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-500">
+        {vacio}
+      </p>
+    )
+  }
+
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline justify-between">
+        <label className="label mb-0">¿A qué facturas se le imputa?</label>
+        <span className="text-xs text-gray-500">Total pendiente {formatCurrency(deuda)}</span>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-gray-100">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="table-th">Factura</th>
+              <th className="table-th text-right">Saldo</th>
+              <th className="table-th w-36 text-right">Se le imputa</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {facturas.map((f) => {
+              const valor = imputado[f.id] ?? 0
+              const excede = valor > f.saldo + 0.01
+              return (
+                <tr key={f.id}>
+                  <td className="table-td">
+                    <span className="font-mono text-xs font-medium text-gray-900">{f.numero}</span>
+                    <span className="block text-xs text-gray-400">{f.fecha}</span>
+                  </td>
+                  <td className="table-td text-right font-medium text-red-600">
+                    {formatCurrency(f.saldo)}
+                  </td>
+                  <td className="table-td text-right">
+                    <input
+                      type="number" step="0.01" min="0" max={f.saldo}
+                      value={imputado[f.id] ?? ''}
+                      onChange={(e) => setImputado((prev) => ({
+                        ...prev, [f.id]: parseFloat(e.target.value) || 0,
+                      }))}
+                      className={`input w-32 text-right text-sm ${excede ? 'border-red-400' : ''}`}
+                      placeholder="0"
+                    />
+                    {valor > 0 && !excede && (
+                      <span className="mt-0.5 block text-xs text-gray-400">
+                        quedan {formatCurrency(f.saldo - valor)}
+                      </span>
+                    )}
+                    {excede && (
+                      <span className="mt-0.5 block text-xs text-red-600">supera el saldo</span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+        <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50 px-4 py-2 text-xs">
+          <span className="text-gray-500">Imputado {formatCurrency(totalImputado)}</span>
+          <span className={sinImputar < 0 ? 'font-medium text-red-600' : 'text-gray-500'}>
+            {sinImputar < 0
+              ? `Te pasaste por ${formatCurrency(Math.abs(sinImputar))}`
+              : sinImputar > 0
+                ? `Quedan ${formatCurrency(sinImputar)} a cuenta`
+                : 'Todo imputado'}
+          </span>
+        </div>
+      </div>
+      <p className="mt-2 text-xs text-gray-400">{ayuda}</p>
+    </div>
+  )
+}
+
 // ── Egreso a proveedor ───────────────────────────────────────────────────────
 
 function ProveedorFields({
@@ -506,8 +683,6 @@ function ProveedorFields({
   totalImputado: number
   sinImputar: number
 }) {
-  const deudaTotal = facturas.reduce((s, f) => s + f.saldo_pendiente, 0)
-
   return (
     <>
       <div>
@@ -530,83 +705,17 @@ function ProveedorFields({
       </div>
 
       {proveedorId && (
-        <div>
-          <div className="mb-2 flex items-baseline justify-between">
-            <label className="label mb-0">¿A qué facturas se le imputa?</label>
-            <span className="text-xs text-gray-500">Debe {formatCurrency(deudaTotal)}</span>
-          </div>
-
-          {facturas.length === 0 ? (
-            <p className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-500">
-              Este proveedor no tiene facturas con saldo pendiente. El pago queda registrado
-              a cuenta.
-            </p>
-          ) : (
-            <div className="overflow-hidden rounded-lg border border-gray-100">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="table-th">Factura</th>
-                    <th className="table-th text-right">Saldo</th>
-                    <th className="table-th w-36 text-right">Se le imputa</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {facturas.map((f) => {
-                    const valor = imputado[f.id] ?? 0
-                    const excede = valor > f.saldo_pendiente + 0.01
-                    return (
-                      <tr key={f.id}>
-                        <td className="table-td">
-                          <span className="font-mono text-xs font-medium text-gray-900">{f.numero}</span>
-                          <span className="block text-xs text-gray-400">{f.fecha}</span>
-                        </td>
-                        <td className="table-td text-right font-medium text-red-600">
-                          {formatCurrency(f.saldo_pendiente)}
-                        </td>
-                        <td className="table-td text-right">
-                          <input
-                            type="number" step="0.01" min="0" max={f.saldo_pendiente}
-                            value={imputado[f.id] ?? ''}
-                            onChange={(e) => setImputado((prev) => ({
-                              ...prev, [f.id]: parseFloat(e.target.value) || 0,
-                            }))}
-                            className={`input w-32 text-right text-sm ${excede ? 'border-red-400' : ''}`}
-                            placeholder="0"
-                          />
-                          {valor > 0 && !excede && (
-                            <span className="mt-0.5 block text-xs text-gray-400">
-                              quedan {formatCurrency(f.saldo_pendiente - valor)}
-                            </span>
-                          )}
-                          {excede && (
-                            <span className="mt-0.5 block text-xs text-red-600">
-                              supera el saldo
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-              <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50 px-4 py-2 text-xs">
-                <span className="text-gray-500">Imputado {formatCurrency(totalImputado)}</span>
-                <span className={sinImputar < 0 ? 'font-medium text-red-600' : 'text-gray-500'}>
-                  {sinImputar < 0
-                    ? `Te pasaste por ${formatCurrency(Math.abs(sinImputar))}`
-                    : sinImputar > 0
-                      ? `Quedan ${formatCurrency(sinImputar)} a cuenta`
-                      : 'Todo imputado'}
-                </span>
-              </div>
-            </div>
-          )}
-          <p className="mt-2 text-xs text-gray-400">
-            Podés pagar una parte: si una factura debe $200.000 y le cargás $100.000,
-            quedan $100.000 pendientes en ella.
-          </p>
-        </div>
+        <FacturasAImputar
+          facturas={facturas.map((f) => ({
+            id: f.id, numero: f.numero, fecha: f.fecha, saldo: f.saldo_pendiente,
+          }))}
+          imputado={imputado}
+          setImputado={setImputado}
+          totalImputado={totalImputado}
+          sinImputar={sinImputar}
+          vacio="Este proveedor no tiene facturas con saldo pendiente. El pago queda registrado a cuenta."
+          ayuda="Podés pagar una parte: si una factura debe $200.000 y le cargás $100.000, quedan $100.000 pendientes en ella."
+        />
       )}
     </>
   )

@@ -20,6 +20,7 @@ export default async function CajaPage() {
     { data: clientes },
     { data: proveedores },
     { data: facturasCompra },
+    { data: facturasVenta },
   ] = await Promise.all([
     supabase.from('v_saldo_caja').select('*').single(),
     supabase
@@ -50,6 +51,12 @@ export default async function CajaPage() {
     supabase
       .from('facturas_compra')
       .select('id, numero, fecha, total, saldo_pendiente, proveedor_id')
+      .gt('saldo_pendiente', 0)
+      .order('fecha')
+      .limit(LIMITE_LISTADO),
+    supabase
+      .from('facturas_venta')
+      .select('id, numero, fecha, total, saldo_pendiente, cliente_id')
       .gt('saldo_pendiente', 0)
       .order('fecha')
       .limit(LIMITE_LISTADO),
@@ -85,6 +92,7 @@ export default async function CajaPage() {
       clientes={clientes ?? []}
       proveedores={proveedores ?? []}
       facturasCompra={facturasCompra ?? []}
+      facturasVenta={facturasVenta ?? []}
     />
   )
 }

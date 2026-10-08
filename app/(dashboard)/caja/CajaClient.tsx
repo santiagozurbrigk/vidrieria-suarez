@@ -29,6 +29,7 @@ type Props = {
   clientes:       { id: string; nombre: string; apellido: string | null; razon_social: string | null }[]
   proveedores:    { id: string; razon_social: string }[]
   facturasCompra: { id: string; numero: string; fecha: string; total: number; saldo_pendiente: number; proveedor_id: string }[]
+  facturasVenta:  { id: string; numero: string; fecha: string; total: number; saldo_pendiente: number; cliente_id: string }[]
 }
 
 function formatCurrency(n: number) {
@@ -38,7 +39,7 @@ function formatCurrency(n: number) {
 export default function CajaClient({
   saldo, movimientos: initial, totalFilas, cierres: initialCierres,
   porDia, porSemana, porMes, porCategoria,
-  productos, clientes, proveedores, facturasCompra,
+  productos, clientes, proveedores, facturasCompra, facturasVenta,
 }: Props) {
   const aviso = avisoListadoParcial(initial.length, totalFilas)
   const router = useRouter()
@@ -327,6 +328,7 @@ export default function CajaClient({
           clientes={clientes}
           proveedores={proveedores}
           facturasCompra={facturasCompra}
+          facturasVenta={facturasVenta}
           onSaved={() => { setShowMovimiento(false); onSaved() }}
           onClose={() => setShowMovimiento(false)}
         />

@@ -48,7 +48,15 @@ cargado, elegilo de la lista.
 > Si no hay stock suficiente de algo, el sistema no te deja y te dice cuánto hay.
 > No queda la venta cargada a medias.
 
-**B) Otro motivo.** Un aporte, un reintegro, lo que sea: escribís de qué es y el
+**B) Cobro de una factura.** Para cuando la mercadería ya salió y recién ahora te
+pagan: por ejemplo un presupuesto que se convirtió en factura. Elegís el cliente,
+el sistema te muestra **sus facturas con saldo** y repartís el monto.
+
+> Igual que con los proveedores, **podés cobrar una parte**: si una factura debe
+> $100.000 y le cargás $40.000, quedan $60.000 pendientes. Esto **no toca el
+> stock**: la mercadería ya había salido con la venta.
+
+**C) Otro motivo.** Un aporte, un reintegro, lo que sea: escribís de qué es y el
 monto.
 
 ### Si sale plata
