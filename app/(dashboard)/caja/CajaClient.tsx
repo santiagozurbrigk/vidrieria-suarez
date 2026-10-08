@@ -7,6 +7,7 @@ import CierreModal from './CierreModal'
 import MovimientoModal from './MovimientoModal'
 import GraficosCaja from './GraficosCaja'
 import { LABEL_CATEGORIA } from '@/lib/caja'
+import { formatearFechaHora } from '@/lib/fechas'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { eliminarMovimiento } from '@/lib/actions/caja'
 import { useRouter } from 'next/navigation'
@@ -32,10 +33,6 @@ type Props = {
 
 function formatCurrency(n: number) {
   return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format(n)
-}
-
-function formatFecha(d: string) {
-  return new Date(d).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
 }
 
 export default function CajaClient({
@@ -229,7 +226,7 @@ export default function CajaClient({
                   <tbody className="divide-y divide-gray-50">
                     {filtrados.map((m) => (
                       <tr key={m.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="table-td text-gray-500 text-xs">{formatFecha(m.fecha)}</td>
+                        <td className="table-td text-gray-500 text-xs">{formatearFechaHora(m.fecha)}</td>
                         <td className="table-td">
                           <span className={`badge ${tipoBadge(m.tipo)}`}>
                             {tipoIcon(m.tipo)} {m.tipo === 'INGRESO' ? 'Ingreso' : m.tipo === 'EGRESO' ? 'Egreso' : 'Ajuste'}

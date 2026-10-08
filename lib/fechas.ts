@@ -60,3 +60,48 @@ export function nombreMes(anio: number, mes: number): string {
     timeZone: 'UTC',
   })
 }
+
+// ── Mostrar una fecha guardada ───────────────────────────────────────────────
+//
+// `movimientos_caja.fecha` es timestamptz, así que formatearla con el default
+// del navegador la muestra en la zona de quien mira. Hay que fijarla en la del
+// negocio, igual que al guardarla.
+
+const formateadorCorto = new Intl.DateTimeFormat('es-AR', {
+  timeZone: ZONA_HORARIA,
+  day: '2-digit',
+  month: '2-digit',
+  year: '2-digit',
+})
+
+const formateadorConHora = new Intl.DateTimeFormat('es-AR', {
+  timeZone: ZONA_HORARIA,
+  day: '2-digit',
+  month: '2-digit',
+  year: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+/** 'DD/MM/AA' en la zona del negocio. */
+export function formatearFecha(iso: string): string {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '—' : formateadorCorto.format(d)
+}
+
+/** 'DD/MM/AA HH:mm' en la zona del negocio. */
+export function formatearFechaHora(iso: string): string {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '—' : formateadorConHora.format(d)
+}
+
+/**
+ * 'YYYY-MM-DD' en la zona del negocio, para precargar un <input type="date">.
+ *
+ * Cortar el ISO con slice(0, 10) daría el día en UTC, que entre las 21:00 y la
+ * medianoche de Argentina ya es el siguiente.
+ */
+export function fechaParaInput(iso: string): string {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? hoy() : formateadorISO.format(d)
+}
