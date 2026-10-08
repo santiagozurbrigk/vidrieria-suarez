@@ -1689,15 +1689,51 @@ export type Database = {
       };
       eliminar_egreso_caja: { Args: { p_movimiento_id: string }; Returns: undefined };
       eliminar_movimiento_caja: { Args: { p_movimiento_id: string }; Returns: undefined };
+      fecha_negocio: { Args: { p_fecha: string }; Returns: string };
       get_user_rol: {
         Args: Record<PropertyKey, never>;
         Returns: Database["public"]["Enums"]["rol_usuario"];
       };
       is_admin: { Args: Record<PropertyKey, never>; Returns: boolean };
       is_vendedor_or_above: { Args: Record<PropertyKey, never>; Returns: boolean };
+      marcar_caja_como_venta: {
+        Args: { p_factura_id: string; p_pago_id: string };
+        Returns: undefined;
+      };
       recalcular_precios_proveedor: { Args: { p_proveedor_id: string }; Returns: number };
       recalcular_saldo_factura_compra: { Args: { p_factura_id: string }; Returns: undefined };
       recalcular_saldo_factura_venta: { Args: { p_factura_id: string }; Returns: undefined };
+      registrar_cobro_caja: {
+        Args: {
+          p_cliente_id: string;
+          p_fecha: string;
+          p_imputaciones?: Json;
+          p_medio_pago: string;
+          p_monto: number;
+          p_notas?: string;
+        };
+        Returns: {
+          categoria_egreso: Database["public"]["Enums"]["categoria_egreso"] | null;
+          concepto: string;
+          created_at: string;
+          factura_venta_id: string | null;
+          fecha: string;
+          gasto_id: string | null;
+          id: string;
+          medio_pago: string | null;
+          monto: number;
+          pago_id: string | null;
+          proveedor_id: string | null;
+          tipo: Database["public"]["Enums"]["tipo_movimiento_caja"];
+          usuario_id: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "movimientos_caja";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       registrar_cobro_venta: {
         Args: {
           p_factura_id: string;

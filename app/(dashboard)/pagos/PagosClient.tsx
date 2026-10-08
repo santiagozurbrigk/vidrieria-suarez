@@ -1,32 +1,21 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
-import type { Cliente, Proveedor, Pago, FacturaVenta, FacturaCompra } from '@/lib/supabase/types'
-import PagoModal from './PagoModal'
-import { useRouter } from 'next/navigation'
+import type { Pago } from '@/lib/supabase/types'
 import { avisoListadoParcial, type NoNulo } from '@/lib/paginacion'
 import type { ResumenPagos } from '@/lib/supabase/types'
 
-type Tipo = 'COBRO_CLIENTE' | 'PAGO_PROVEEDOR'
 
 type PagoConRelaciones = Pago & {
   clientes:    { nombre: string; apellido: string | null; razon_social: string | null } | null
   proveedores: { razon_social: string } | null
 }
 
-type ClienteSlim       = Pick<Cliente,      'id' | 'nombre' | 'apellido' | 'razon_social'>
-type ProveedorSlim     = Pick<Proveedor,    'id' | 'razon_social'>
-type FacturaVentaSlim  = Pick<FacturaVenta,  'id' | 'numero' | 'fecha' | 'total' | 'saldo_pendiente' | 'cliente_id'>
-type FacturaCompraSlim = Pick<FacturaCompra, 'id' | 'numero' | 'fecha' | 'total' | 'saldo_pendiente' | 'proveedor_id'>
-
 type Props = {
   pagos:          PagoConRelaciones[]
   totalFilas:     number | null
   resumen:        NoNulo<ResumenPagos>
-  clientes:       ClienteSlim[]
-  proveedores:    ProveedorSlim[]
-  facturasVenta:  FacturaVentaSlim[]
-  facturasCompra: FacturaCompraSlim[]
 }
 
 type Filtro = 'TODOS' | 'COBRO_CLIENTE' | 'PAGO_PROVEEDOR'
@@ -45,12 +34,10 @@ function entidadLabel(p: PagoConRelaciones) {
   return p.proveedores?.razon_social ?? '—'
 }
 
-export default function PagosClient({ pagos: initial, totalFilas, resumen, clientes, proveedores, facturasVenta, facturasCompra }: Props) {
-  const router = useRouter()
+export default function PagosClient({ pagos: initial, totalFilas, resumen }: Props) {
   const pagos = initial
   const [filtro, setFiltro]       = useState<Filtro>('TODOS')
   const [busqueda, setBusqueda]   = useState('')
-  const [modalTipo, setModalTipo] = useState<Tipo | null>(null)
 
   const filtrados = pagos.filter((p) => {
     const matchFiltro   = filtro === 'TODOS' || p.tipo === filtro
@@ -65,11 +52,6 @@ export default function PagosClient({ pagos: initial, totalFilas, resumen, clien
   const totalPagos  = resumen.total_pagos
   const aviso = avisoListadoParcial(pagos.length, totalFilas)
 
-  function onSaved() {
-    setModalTipo(null)
-    router.refresh()
-  }
-
   return (
     <>
       <div>
@@ -77,21 +59,14 @@ export default function PagosClient({ pagos: initial, totalFilas, resumen, clien
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Pagos</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Cobros a clientes y pagos a proveedores. Se imputan a facturas y actualizan el saldo automáticamente.
+            <p className="mt-1 text-sm text-gray-500">
+              Cobros a clientes y pagos a proveedores, con su imputación a facturas.
+              Se cargan desde Caja.
             </p>
           </div>
-          <div className="flex gap-2 shrink-0">
-            <button onClick={() => setModalTipo('COBRO_CLIENTE')} className="btn-primary">
-              + Cobro
-            </button>
-            <button
-              onClick={() => setModalTipo('PAGO_PROVEEDOR')}
-              className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700 transition-colors"
-            >
-              + Pago
-            </button>
-          </div>
+          <Link href="/caja" className="btn-primary shrink-0">
+            Cargar en Caja
+          </Link>
         </div>
 
         {aviso && (
@@ -189,17 +164,6 @@ export default function PagosClient({ pagos: initial, totalFilas, resumen, clien
         </div>
       </div>
 
-      {modalTipo && (
-        <PagoModal
-          tipo={modalTipo}
-          clientes={clientes}
-          proveedores={proveedores}
-          facturasVenta={facturasVenta}
-          facturasCompra={facturasCompra}
-          onSaved={onSaved}
-          onClose={() => setModalTipo(null)}
-        />
-      )}
     </>
   )
 }

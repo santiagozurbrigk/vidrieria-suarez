@@ -5,13 +5,11 @@ import PagosClient from './PagosClient'
 export default async function PagosPage() {
   const supabase = await createServerClient()
 
+  // Pagos es sólo de consulta: la carga entra por Caja, así que ya no hace falta
+  // traer clientes, proveedores ni facturas pendientes.
   const [
     { data: pagos, count },
     { data: resumen },
-    { data: clientes },
-    { data: proveedores },
-    { data: facturasVenta },
-    { data: facturasCompra },
   ] = await Promise.all([
     supabase
       .from('pagos')
@@ -20,26 +18,6 @@ export default async function PagosPage() {
       .order('created_at', { ascending: false })
       .limit(LIMITE_LISTADO),
     supabase.from('v_resumen_pagos').select('*').single(),
-    supabase
-      .from('clientes')
-      .select('id, nombre, apellido, razon_social')
-      .eq('activo', true)
-      .order('nombre'),
-    supabase
-      .from('proveedores')
-      .select('id, razon_social')
-      .eq('activo', true)
-      .order('razon_social'),
-    supabase
-      .from('facturas_venta')
-      .select('id, numero, fecha, total, saldo_pendiente, cliente_id')
-      .gt('saldo_pendiente', 0)
-      .order('fecha'),
-    supabase
-      .from('facturas_compra')
-      .select('id, numero, fecha, total, saldo_pendiente, proveedor_id')
-      .gt('saldo_pendiente', 0)
-      .order('fecha'),
   ])
 
   return (
@@ -47,10 +25,6 @@ export default async function PagosPage() {
       pagos={pagos ?? []}
       totalFilas={count}
       resumen={conCeros(resumen, { cantidad: 0, total_cobros: 0, total_pagos: 0 })}
-      clientes={clientes ?? []}
-      proveedores={proveedores ?? []}
-      facturasVenta={facturasVenta ?? []}
-      facturasCompra={facturasCompra ?? []}
     />
   )
 }

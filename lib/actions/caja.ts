@@ -204,6 +204,51 @@ export async function registrarEgreso(payload: unknown): Promise<Resultado> {
   })
 }
 
+const imputacionVentaSchema = z.object({
+  factura_venta_id: z.string().uuid(),
+  monto_imputado:   z.coerce.number().positive(),
+})
+
+const cobroSchema = z.object({
+  cliente_id:   z.string().uuid('Elegí el cliente que pagó'),
+  monto:        montoPositivo,
+  medio_pago:   textoRequerido('Elegí el medio de pago'),
+  fecha:        fechaISO,
+  imputaciones: z.array(imputacionVentaSchema).default([]),
+  notas:        textoOpcional,
+})
+
+/**
+ * Ingreso por el cobro de una factura que ya existía.
+ *
+ * El espejo del egreso a proveedor: se reparte el monto entre las facturas del
+ * cliente con saldo, aceptando cobros parciales. No es una venta nueva —la
+ * mercadería ya salió—, así que no toca el stock.
+ */
+export async function registrarCobro(payload: unknown): Promise<Resultado> {
+  return ejecutar(async () => {
+    const data = parsear(cobroSchema, payload)
+
+    const imputado = data.imputaciones.reduce((s, i) => s + i.monto_imputado, 0)
+    if (imputado > data.monto + 0.001) {
+      throw new Error('Lo cargado a las facturas supera el monto del cobro.')
+    }
+    const { supabase } = await conUsuario()
+
+    const { error } = await supabase.rpc('registrar_cobro_caja', {
+      p_cliente_id:   data.cliente_id,
+      p_monto:        data.monto,
+      p_medio_pago:   data.medio_pago,
+      p_fecha:        data.fecha,
+      p_imputaciones: data.imputaciones,
+      p_notas:        data.notas ?? undefined,
+    })
+    if (error) throw error
+
+    revalidarTodo()
+  })
+}
+
 function revalidarTodo() {
   revalidatePath('/caja')
   revalidatePath('/gastos')
