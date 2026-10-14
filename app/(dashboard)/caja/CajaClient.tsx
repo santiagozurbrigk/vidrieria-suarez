@@ -6,7 +6,7 @@ import AjusteModal from './AjusteModal'
 import CierreModal from './CierreModal'
 import MovimientoModal from './MovimientoModal'
 import GraficosCaja from './GraficosCaja'
-import { LABEL_CATEGORIA } from '@/lib/caja'
+import { LABEL_CATEGORIA, LABEL_CATEGORIA_INGRESO } from '@/lib/caja'
 import { formatearFechaHora } from '@/lib/fechas'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { eliminarMovimiento } from '@/lib/actions/caja'
@@ -24,7 +24,8 @@ type Props = {
   porDia:       { dia: string; ingresos: number; egresos: number; neto: number }[]
   porSemana:    { semana: string; ingresos: number; egresos: number; neto: number }[]
   porMes:       { mes: string; ingresos: number; egresos: number; neto: number }[]
-  porCategoria: { categoria: string; total: number }[]
+  porCategoria:        { categoria: string; total: number }[]
+  porCategoriaIngreso: { categoria: string; total: number }[]
   productos:      { id: string; nombre: string; unidad_medida: string; precio_venta: number; stock_actual: number }[]
   clientes:       { id: string; nombre: string; apellido: string | null; razon_social: string | null }[]
   proveedores:    { id: string; razon_social: string }[]
@@ -38,7 +39,7 @@ function formatCurrency(n: number) {
 
 export default function CajaClient({
   saldo, movimientos: initial, totalFilas, cierres: initialCierres,
-  porDia, porSemana, porMes, porCategoria,
+  porDia, porSemana, porMes, porCategoria, porCategoriaIngreso,
   productos, clientes, proveedores, facturasCompra, facturasVenta,
 }: Props) {
   const aviso = avisoListadoParcial(initial.length, totalFilas)
@@ -55,9 +56,14 @@ export default function CajaClient({
 
   const filtrados = initial.filter((m) => {
     const matchTipo     = filtro === 'TODOS' || m.tipo === filtro
+    const q = busqueda.toLowerCase()
+    const etiqueta = m.categoria_egreso
+      ? LABEL_CATEGORIA[m.categoria_egreso] ?? ''
+      : LABEL_CATEGORIA_INGRESO[m.categoria_ingreso ?? ''] ?? ''
     const matchBusqueda = busqueda === '' ||
-      m.concepto.toLowerCase().includes(busqueda.toLowerCase()) ||
-      (m.medio_pago ?? '').toLowerCase().includes(busqueda.toLowerCase())
+      m.concepto.toLowerCase().includes(q) ||
+      (m.medio_pago ?? '').toLowerCase().includes(q) ||
+      etiqueta.toLowerCase().includes(q)
     return matchTipo && matchBusqueda
   })
 
@@ -160,6 +166,7 @@ export default function CajaClient({
           porSemana={porSemana}
           porMes={porMes}
           porCategoria={porCategoria}
+          porCategoriaIngreso={porCategoriaIngreso}
         />
 
         {/* Tabs */}
@@ -237,7 +244,9 @@ export default function CajaClient({
                         <td className="table-td text-sm text-gray-500">
                           {m.categoria_egreso
                             ? LABEL_CATEGORIA[m.categoria_egreso] ?? m.categoria_egreso
-                            : '—'}
+                            : m.categoria_ingreso
+                              ? LABEL_CATEGORIA_INGRESO[m.categoria_ingreso] ?? m.categoria_ingreso
+                              : '—'}
                         </td>
                         <td className="table-td text-sm text-gray-500">{m.medio_pago ?? '—'}</td>
                         <td className={`table-td text-right font-semibold ${

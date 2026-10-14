@@ -31,6 +31,10 @@ Menú → **💰 Caja** → **+ Nuevo movimiento**. Lo primero que elegís:
 
 ### Si entra plata
 
+Primero elegís **de dónde entró**: **Galpón**, **Vidriería** o **Negocio**. Son
+las tres partes del negocio, y sirve para después ver cuánto aportó cada una.
+Vale para los tres casos de abajo.
+
 Después te pregunta de qué es:
 
 **A) Venta de productos.** Elegís del stock qué se vendió. Por cada producto podés
@@ -97,6 +101,8 @@ La pantalla de Caja muestra:
 - **El saldo actual**, y los totales que entraron y salieron.
 - **Gráficos** de entradas y salidas, que podés ver **por día, por semana o por
   mes**. Pasá el mouse por una barra para ver el detalle de ese día.
+- **Las entradas por categoría** del mes, para ver cuánto aportó Galpón,
+  Vidriería y Negocio.
 - **Las salidas por categoría** del mes, para ver en qué se te va la plata.
 - **Todos los movimientos**, con su categoría, que podés filtrar y buscar.
 - **Los cierres**, en la pestaña de al lado.

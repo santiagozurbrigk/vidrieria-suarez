@@ -16,6 +16,7 @@ export default async function CajaPage() {
     { data: porSemana },
     { data: porMes },
     { data: porCategoria },
+    { data: porCategoriaIngreso },
     { data: productos },
     { data: clientes },
     { data: proveedores },
@@ -34,6 +35,7 @@ export default async function CajaPage() {
     supabase.from('v_caja_por_semana').select('*').order('semana', { ascending: false }).limit(26),
     supabase.from('v_caja_por_mes').select('*').order('mes', { ascending: false }).limit(24),
     supabase.from('v_egresos_por_categoria_mes').select('*').eq('mes', mesActual).order('total', { ascending: false }),
+    supabase.from('v_ingresos_por_categoria_mes').select('*').eq('mes', mesActual).order('total', { ascending: false }),
     // Lo que necesita el modal para cargar un movimiento.
     supabase
       .from('productos')
@@ -86,6 +88,9 @@ export default async function CajaPage() {
         mes: d.mes ?? '', ingresos: n(d.ingresos), egresos: n(d.egresos), neto: n(d.neto),
       }))}
       porCategoria={(porCategoria ?? []).map((c) => ({
+        categoria: c.categoria ?? 'SIN_CATEGORIA', total: n(c.total),
+      }))}
+      porCategoriaIngreso={(porCategoriaIngreso ?? []).map((c) => ({
         categoria: c.categoria ?? 'SIN_CATEGORIA', total: n(c.total),
       }))}
       productos={productos ?? []}
