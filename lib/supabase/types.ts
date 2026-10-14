@@ -546,6 +546,7 @@ export type Database = {
       movimientos_caja: {
         Row: {
           categoria_egreso: Database["public"]["Enums"]["categoria_egreso"] | null;
+          categoria_ingreso: Database["public"]["Enums"]["categoria_ingreso"] | null;
           concepto: string;
           created_at: string;
           factura_venta_id: string | null;
@@ -562,6 +563,7 @@ export type Database = {
         ComputedFields: never;
         Insert: {
           categoria_egreso?: Database["public"]["Enums"]["categoria_egreso"] | null;
+          categoria_ingreso?: Database["public"]["Enums"]["categoria_ingreso"] | null;
           concepto: string;
           created_at?: string;
           factura_venta_id?: string | null;
@@ -577,6 +579,7 @@ export type Database = {
         };
         Update: {
           categoria_egreso?: Database["public"]["Enums"]["categoria_egreso"] | null;
+          categoria_ingreso?: Database["public"]["Enums"]["categoria_ingreso"] | null;
           concepto?: string;
           created_at?: string;
           factura_venta_id?: string | null;
@@ -1375,6 +1378,16 @@ export type Database = {
         ComputedFields: never;
         Relationships: [];
       };
+      v_ingresos_por_categoria_mes: {
+        Row: {
+          cantidad: number | null;
+          categoria: string | null;
+          mes: string | null;
+          total: number | null;
+        };
+        ComputedFields: never;
+        Relationships: [];
+      };
       v_productos_bajo_minimo: {
         Row: {
           activo: boolean | null;
@@ -1505,6 +1518,7 @@ export type Database = {
         };
         Returns: {
           categoria_egreso: Database["public"]["Enums"]["categoria_egreso"] | null;
+          categoria_ingreso: Database["public"]["Enums"]["categoria_ingreso"] | null;
           concepto: string;
           created_at: string;
           factura_venta_id: string | null;
@@ -1700,11 +1714,16 @@ export type Database = {
         Args: { p_factura_id: string; p_pago_id: string };
         Returns: undefined;
       };
+      marcar_categoria_ingreso: {
+        Args: { p_categoria: Database["public"]["Enums"]["categoria_ingreso"]; p_pago_id: string };
+        Returns: undefined;
+      };
       recalcular_precios_proveedor: { Args: { p_proveedor_id: string }; Returns: number };
       recalcular_saldo_factura_compra: { Args: { p_factura_id: string }; Returns: undefined };
       recalcular_saldo_factura_venta: { Args: { p_factura_id: string }; Returns: undefined };
       registrar_cobro_caja: {
         Args: {
+          p_categoria?: Database["public"]["Enums"]["categoria_ingreso"];
           p_cliente_id: string;
           p_fecha: string;
           p_imputaciones?: Json;
@@ -1714,6 +1733,7 @@ export type Database = {
         };
         Returns: {
           categoria_egreso: Database["public"]["Enums"]["categoria_egreso"] | null;
+          categoria_ingreso: Database["public"]["Enums"]["categoria_ingreso"] | null;
           concepto: string;
           created_at: string;
           factura_venta_id: string | null;
@@ -1774,6 +1794,7 @@ export type Database = {
         };
         Returns: {
           categoria_egreso: Database["public"]["Enums"]["categoria_egreso"] | null;
+          categoria_ingreso: Database["public"]["Enums"]["categoria_ingreso"] | null;
           concepto: string;
           created_at: string;
           factura_venta_id: string | null;
@@ -1796,6 +1817,7 @@ export type Database = {
       };
       registrar_ingreso_caja: {
         Args: {
+          p_categoria?: Database["public"]["Enums"]["categoria_ingreso"];
           p_concepto: string;
           p_fecha: string;
           p_medio_pago: string;
@@ -1804,6 +1826,7 @@ export type Database = {
         };
         Returns: {
           categoria_egreso: Database["public"]["Enums"]["categoria_egreso"] | null;
+          categoria_ingreso: Database["public"]["Enums"]["categoria_ingreso"] | null;
           concepto: string;
           created_at: string;
           factura_venta_id: string | null;
@@ -1856,6 +1879,7 @@ export type Database = {
       };
       registrar_venta_caja: {
         Args: {
+          p_categoria?: Database["public"]["Enums"]["categoria_ingreso"];
           p_cliente_id?: string;
           p_fecha: string;
           p_items: Json;
@@ -1866,6 +1890,7 @@ export type Database = {
         };
         Returns: {
           categoria_egreso: Database["public"]["Enums"]["categoria_egreso"] | null;
+          categoria_ingreso: Database["public"]["Enums"]["categoria_ingreso"] | null;
           concepto: string;
           created_at: string;
           factura_venta_id: string | null;
@@ -1896,6 +1921,7 @@ export type Database = {
         | "VARIOS"
         | "VEHICULOS"
         | "COMBUSTIBLE";
+      categoria_ingreso: "GALPON" | "VIDRIERIA" | "NEGOCIO";
       categoria_producto: "VIDRIO" | "ALUMINIO" | "ACCESORIO" | "INSUMO";
       condicion_iva: "RESPONSABLE_INSCRIPTO" | "MONOTRIBUTISTA" | "EXENTO" | "CONSUMIDOR_FINAL";
       estado_factura: "PENDIENTE" | "PARCIAL" | "PAGADA";
@@ -2020,6 +2046,7 @@ export const Constants = {
   public: {
     Enums: {
       categoria_egreso: ["PROVEEDOR", "SERVICIO", "RETIRO", "VARIOS", "VEHICULOS", "COMBUSTIBLE"],
+      categoria_ingreso: ["GALPON", "VIDRIERIA", "NEGOCIO"],
       categoria_producto: ["VIDRIO", "ALUMINIO", "ACCESORIO", "INSUMO"],
       condicion_iva: ["RESPONSABLE_INSCRIPTO", "MONOTRIBUTISTA", "EXENTO", "CONSUMIDOR_FINAL"],
       estado_factura: ["PENDIENTE", "PARCIAL", "PAGADA"],
@@ -2066,3 +2093,4 @@ export type CajaPorDia = Views<"v_caja_por_dia">;
 export type CajaPorSemana = Views<"v_caja_por_semana">;
 export type CajaPorMes = Views<"v_caja_por_mes">;
 export type EgresosPorCategoriaMes = Views<"v_egresos_por_categoria_mes">;
+export type IngresosPorCategoriaMes = Views<"v_ingresos_por_categoria_mes">;

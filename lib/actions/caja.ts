@@ -73,6 +73,8 @@ export async function registrarCierreCaja(payload: unknown): Promise<Resultado> 
 // factura colgada, y un pago a proveedor no deja la plata registrada sin imputar.
 
 const CATEGORIAS = ['PROVEEDOR', 'SERVICIO', 'RETIRO', 'VARIOS', 'VEHICULOS', 'COMBUSTIBLE'] as const
+// Las unidades del negocio, que es de dónde vino la plata que entró.
+const CATEGORIAS_ING = ['GALPON', 'VIDRIERIA', 'NEGOCIO'] as const
 
 const itemVentaSchema = z.object({
   producto_id:     z.string().uuid(),
@@ -87,6 +89,7 @@ const ventaSchema = z.object({
   medio_pago: textoRequerido('Elegí el medio de pago'),
   fecha:      fechaISO,
   cliente_id: z.string().uuid().nullable().optional(),
+  categoria:  z.enum(CATEGORIAS_ING).nullable().optional(),
   notas:      textoOpcional,
   items:      z.array(itemVentaSchema).min(1, 'Elegí qué se vendió'),
 })
@@ -111,6 +114,7 @@ export async function registrarVenta(payload: unknown): Promise<Resultado> {
       p_cliente_id: data.cliente_id ?? undefined,
       p_iva:        data.iva,
       p_notas:      data.notas ?? undefined,
+      p_categoria:  data.categoria ?? undefined,
     })
     if (error) throw error
 
@@ -123,6 +127,7 @@ const ingresoSchema = z.object({
   monto:      montoPositivo,
   medio_pago: textoRequerido('Elegí el medio de pago'),
   fecha:      fechaISO,
+  categoria:  z.enum(CATEGORIAS_ING).nullable().optional(),
   notas:      textoOpcional,
 })
 
@@ -138,6 +143,7 @@ export async function registrarIngreso(payload: unknown): Promise<Resultado> {
       p_medio_pago: data.medio_pago,
       p_fecha:      data.fecha,
       p_notas:      data.notas ?? undefined,
+      p_categoria:  data.categoria ?? undefined,
     })
     if (error) throw error
 
@@ -215,6 +221,7 @@ const cobroSchema = z.object({
   medio_pago:   textoRequerido('Elegí el medio de pago'),
   fecha:        fechaISO,
   imputaciones: z.array(imputacionVentaSchema).default([]),
+  categoria:    z.enum(CATEGORIAS_ING).nullable().optional(),
   notas:        textoOpcional,
 })
 
@@ -242,6 +249,7 @@ export async function registrarCobro(payload: unknown): Promise<Resultado> {
       p_fecha:        data.fecha,
       p_imputaciones: data.imputaciones,
       p_notas:        data.notas ?? undefined,
+      p_categoria:    data.categoria ?? undefined,
     })
     if (error) throw error
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { LABEL_CATEGORIA } from '@/lib/caja'
+import { LABEL_CATEGORIA, LABEL_CATEGORIA_INGRESO } from '@/lib/caja'
 import { nombreMes } from '@/lib/fechas'
 
 /**
@@ -23,7 +23,8 @@ type Props = {
   porDia:       { dia: string; ingresos: number; egresos: number; neto: number }[]
   porSemana:    { semana: string; ingresos: number; egresos: number; neto: number }[]
   porMes:       { mes: string; ingresos: number; egresos: number; neto: number }[]
-  porCategoria: { categoria: string; total: number }[]
+  porCategoria:        { categoria: string; total: number }[]
+  porCategoriaIngreso: { categoria: string; total: number }[]
 }
 
 function formatCurrency(n: number) {
@@ -46,7 +47,9 @@ function mesCorto(iso: string) {
   return `${nombreMes(a, m).slice(0, 3)} ${String(a).slice(2)}`
 }
 
-export default function GraficosCaja({ porDia, porSemana, porMes, porCategoria }: Props) {
+export default function GraficosCaja({
+  porDia, porSemana, porMes, porCategoria, porCategoriaIngreso,
+}: Props) {
   const [periodo, setPeriodo] = useState<Periodo>('dia')
 
   // Los últimos tramos, en orden cronológico y con un techo para que el gráfico
@@ -75,7 +78,7 @@ export default function GraficosCaja({ porDia, porSemana, porMes, porCategoria }
   const ETIQUETAS: Record<Periodo, string> = { dia: 'Por día', semana: 'Por semana', mes: 'Por mes' }
 
   return (
-    <div className="mb-6 grid gap-4 lg:grid-cols-3">
+    <div className="mb-6 grid gap-4 lg:grid-cols-4">
       {/* ── Ingresos vs egresos en el tiempo ── */}
       <div className="card p-5 lg:col-span-2">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -154,6 +157,38 @@ export default function GraficosCaja({ porDia, porSemana, porMes, porCategoria }
               Máximo del período: {formatCompacto(maximo)}. Pasá el mouse por una barra para ver el detalle.
             </p>
           </>
+        )}
+      </div>
+
+      {/* ── Ingresos por categoría ── */}
+      <div className="card p-5">
+        <h2 className="mb-1 text-sm font-semibold text-gray-900">Entradas por categoría</h2>
+        <p className="mb-4 text-xs text-gray-400">Este mes</p>
+
+        {porCategoriaIngreso.length === 0 ? (
+          <p className="py-10 text-center text-sm text-gray-400">Sin entradas este mes.</p>
+        ) : (
+          <div className="space-y-2.5">
+            {porCategoriaIngreso.map((c) => {
+              const tope = Math.max(...porCategoriaIngreso.map((x) => x.total))
+              return (
+                <div key={c.categoria}>
+                  <div className="mb-1 flex items-baseline justify-between text-xs">
+                    <span className="font-medium text-gray-700">
+                      {LABEL_CATEGORIA_INGRESO[c.categoria] ?? 'Sin categoría'}
+                    </span>
+                    <span className="text-gray-500">{formatCurrency(c.total)}</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${Math.max(2, (c.total / tope) * 100)}%`, background: COLOR_INGRESO }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         )}
       </div>
 

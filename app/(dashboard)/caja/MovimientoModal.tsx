@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { registrarVenta, registrarIngreso, registrarEgreso, registrarCobro } from '@/lib/actions/caja'
-import { CATEGORIAS_EGRESO, MEDIOS_PAGO, type CategoriaEgreso } from '@/lib/caja'
+import { CATEGORIAS_EGRESO, CATEGORIAS_INGRESO, MEDIOS_PAGO, type CategoriaEgreso, type CategoriaIngreso } from '@/lib/caja'
 import { hoy } from '@/lib/fechas'
 
 type ProductoSlim = { id: string; nombre: string; unidad_medida: string; precio_venta: number; stock_actual: number }
@@ -68,6 +68,9 @@ export default function MovimientoModal({
   // Ingreso por otro motivo / egreso que no es a proveedor
   const [concepto, setConcepto] = useState('')
   const [monto, setMonto]       = useState<number | ''>('')
+
+  // De qué unidad del negocio vino la plata que entra.
+  const [categoriaIngreso, setCategoriaIngreso] = useState<CategoriaIngreso>('NEGOCIO')
 
   // Egreso
   const [categoria, setCategoria]     = useState<CategoriaEgreso>('PROVEEDOR')
@@ -168,6 +171,7 @@ export default function MovimientoModal({
           medio_pago: medioPago,
           fecha,
           cliente_id: clienteId || null,
+          categoria:  categoriaIngreso,
           notas:      notas.trim(),
           items: items.map(({ producto_id, cantidad, precio_unitario, subtotal }) => ({
             producto_id, cantidad, precio_unitario, subtotal,
@@ -179,6 +183,7 @@ export default function MovimientoModal({
             monto:      montoFinal,
             medio_pago: medioPago,
             fecha,
+            categoria:  categoriaIngreso,
             imputaciones: Object.entries(imputadoVenta)
               .filter(([, v]) => v > 0)
               .map(([factura_venta_id, monto_imputado]) => ({ factura_venta_id, monto_imputado })),
@@ -187,7 +192,9 @@ export default function MovimientoModal({
       : tipo === 'INGRESO'
         ? await registrarIngreso({
             concepto: concepto.trim(), monto: montoFinal,
-            medio_pago: medioPago, fecha, notas: notas.trim(),
+            medio_pago: medioPago, fecha,
+            categoria: categoriaIngreso,
+            notas: notas.trim(),
           })
         : await registrarEgreso({
             categoria,
@@ -262,6 +269,29 @@ export default function MovimientoModal({
                       }`}
                     >
                       {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── INGRESO: de qué unidad del negocio ── */}
+            {tipo === 'INGRESO' && (
+              <div>
+                <label className="label">¿De dónde entró? *</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {CATEGORIAS_INGRESO.map((c) => (
+                    <button
+                      key={c.valor}
+                      type="button"
+                      onClick={() => setCategoriaIngreso(c.valor)}
+                      className={`rounded-lg border py-2 text-sm font-medium transition-colors ${
+                        categoriaIngreso === c.valor
+                          ? 'border-green-600 bg-green-600 text-white'
+                          : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {c.label}
                     </button>
                   ))}
                 </div>
